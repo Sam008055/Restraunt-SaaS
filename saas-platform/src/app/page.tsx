@@ -5,7 +5,7 @@ import { motion, useScroll, useTransform } from "motion/react";
 import { ArrowRight, QrCode, CreditCard, Desktop } from "@phosphor-icons/react";
 import { useRef } from "react";
 
-const STAGGER = {
+const STAGGER: any = {
   hidden: { opacity: 0, y: 30 },
   show: {
     opacity: 1,
@@ -18,7 +18,7 @@ const STAGGER = {
   },
 };
 
-const ITEM = {
+const ITEM: any = {
   hidden: { opacity: 0, y: 30 },
   show: { opacity: 1, y: 0, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } },
 };
@@ -45,21 +45,24 @@ export default function LandingPage() {
         transition={{ duration: 1, ease: "easeOut" }}
         className="fixed top-0 left-0 right-0 z-50 px-6 py-5 md:px-16 flex items-center justify-between backdrop-blur-md bg-[#fcf9f8]/80 border-b border-[#c5a059]/10"
       >
-        <div className="font-playfair text-xl font-bold tracking-tight text-[#061b0e]">
-          SavorSystem
+        <div className="flex items-center gap-3">
+          <img src="/logo.png" alt="Nosh Logo" className="w-8 h-8 rounded-md" />
+          <div className="font-playfair text-2xl font-bold tracking-tight text-[#061b0e]">
+            Nosh
+          </div>
         </div>
         <div className="flex items-center gap-6">
           <Link
             href="/login"
-            className="text-sm font-semibold uppercase tracking-widest text-[#434843] hover:text-[#c5a059] transition-colors"
+            className="text-sm font-bold uppercase tracking-widest text-[#434843] hover:text-[#c5a059] transition-colors"
           >
             Sign In
           </Link>
           <Link
-            href="/onboarding/step-1"
-            className="text-sm font-semibold uppercase tracking-widest bg-[#061b0e] text-[#fcf9f8] px-5 py-2.5 hover:bg-[#1b3022] transition-colors"
+            href="/login"
+            className="text-sm font-bold uppercase tracking-widest bg-[#eaff00] text-black px-5 py-2.5 rounded-full hover:bg-[#d4e600] transition-colors shadow-sm"
           >
-            Start Legacy
+            Get Started
           </Link>
         </div>
       </motion.nav>
@@ -78,39 +81,35 @@ export default function LandingPage() {
         >
           <motion.p
             variants={ITEM}
-            className="text-[#c5a059] text-xs md:text-sm font-semibold uppercase tracking-[0.2em] mb-6"
+            className="text-[#ff0055] text-xs md:text-sm font-bold uppercase tracking-[0.2em] mb-6"
           >
-            The Standard of Excellence
+            The Ultimate Vibe Check
           </motion.p>
           <motion.h1
             variants={ITEM}
             className="font-playfair text-5xl md:text-7xl lg:text-[5.5rem] leading-[1.05] font-bold text-[#061b0e] tracking-tight mb-8"
           >
-            Elevate Your <br />
-            <span className="italic text-[#1b3022]">Dining Experience.</span>
+            Dine differently. <br />
+            <span className="italic text-[#ff0055]">Zero friction.</span>
           </motion.h1>
           <motion.p
             variants={ITEM}
             className="text-lg md:text-xl text-[#434843] max-w-2xl mx-auto mb-12 leading-relaxed"
           >
-            Bespoke digital menus, frictionless table-side payments, and intelligent
-            kitchen orchestration. Built for culinary establishments that refuse to
-            compromise.
+            Dope digital menus, instant table-side payments, and real-time
+            kitchen vibes. Built for restaurants that actually get it.
           </motion.p>
           <motion.div variants={ITEM} className="flex flex-col sm:flex-row items-center justify-center gap-6">
             <Link
-              href="/onboarding/step-1"
-              className="group relative flex items-center gap-3 bg-[#061b0e] text-[#fcf9f8] px-8 py-4 overflow-hidden"
+              href="/login"
+              className="group relative flex items-center gap-3 bg-[#061b0e] text-[#fcf9f8] px-8 py-4 rounded-full overflow-hidden"
             >
-              <div className="absolute inset-0 bg-[#c5a059] translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-[0.16,1,0.3,1]" />
-              <span className="relative z-10 text-sm font-semibold uppercase tracking-widest">
-                Curate Your Menu
+              <div className="absolute inset-0 bg-[#eaff00] translate-y-full group-hover:translate-y-0 transition-transform duration-500 ease-[0.16,1,0.3,1]" />
+              <span className="relative z-10 text-sm font-bold uppercase tracking-widest group-hover:text-black transition-colors">
+                Build Your Menu
               </span>
-              <ArrowRight size={16} className="relative z-10 group-hover:translate-x-1 transition-transform" />
+              <ArrowRight size={16} className="relative z-10 group-hover:translate-x-1 group-hover:text-black transition-all" />
             </Link>
-            <button className="text-sm font-semibold uppercase tracking-widest text-[#061b0e] hover:text-[#c5a059] transition-colors border-b border-transparent hover:border-[#c5a059] pb-0.5">
-              Request Private Demo
-            </button>
           </motion.div>
         </motion.div>
       </section>
@@ -128,26 +127,26 @@ export default function LandingPage() {
           className="text-center mb-24"
         >
           <motion.h2 variants={ITEM} className="font-playfair text-4xl md:text-5xl text-[#061b0e] mb-4">
-            Uncompromising Refinement
+            Next-Gen Features
           </motion.h2>
-          <motion.div variants={ITEM} className="w-12 h-0.5 bg-[#c5a059] mx-auto" />
+          <motion.div variants={ITEM} className="w-12 h-0.5 bg-[#eaff00] mx-auto" />
         </motion.div>
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-16 md:gap-12">
           {[
             {
-              title: "Bespoke Digital Menus",
-              desc: "A tactile, premium browsing experience on the guest's own device. No clunky apps—just pure culinary anticipation.",
+              title: "Digital Menus That Pop",
+              desc: "A sleek, mobile-first browsing experience right from their own phone. No app required—just scan and crave.",
               icon: QrCode,
             },
             {
-              title: "Frictionless Payments",
-              desc: "Discreet and immediate table-side checkout. Let your guests settle their bill with grace, powered by Razorpay.",
+              title: "Seamless Payments",
+              desc: "Instant, table-side checkout. Let your guests split the bill and pay in seconds using Razorpay.",
               icon: CreditCard,
             },
             {
-              title: "Intelligent Orchestration",
-              desc: "A quiet, highly legible Kitchen Display System that keeps your back-of-house in perfect, unhurried synchronization.",
+              title: "Live Kitchen Sync",
+              desc: "A highly intuitive Kitchen Display System that keeps your cooks in perfect flow without the chaos.",
               icon: Desktop,
             },
           ].map((feat, i) => (
@@ -181,12 +180,12 @@ export default function LandingPage() {
             viewport={{ once: true }}
             transition={{ duration: 1, ease: "easeOut" }}
           >
-            <span className="text-[#c5a059] text-6xl font-playfair leading-none block mb-6">"</span>
+            <span className="text-[#eaff00] text-6xl font-playfair leading-none block mb-6">"</span>
             <h2 className="font-playfair text-3xl md:text-5xl leading-tight mb-12 text-white font-light italic">
-              SavorSystem is the silent partner every world-class kitchen needs. It removes friction without removing the romance of dining.
+              Nosh completely leveled up our restaurant's aesthetic and flow. Orders are flying out the kitchen faster than ever.
             </h2>
-            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#c5a059]">
-              — Chef Julian Dupont, <span className="text-[#b4cdb8]">Le Petit Rêve (★★)</span>
+            <p className="text-sm font-semibold uppercase tracking-[0.2em] text-[#eaff00]">
+              — Kiki & Co., <span className="text-white/60">Boutique Cafe</span>
             </p>
           </motion.div>
         </div>
@@ -201,7 +200,7 @@ export default function LandingPage() {
           transition={{ duration: 0.8 }}
           className="font-playfair text-4xl text-[#061b0e] mb-8"
         >
-          Join the Exclusive Platform
+          Join the Club
         </motion.h2>
         <motion.p
           initial={{ opacity: 0, y: 20 }}
@@ -219,10 +218,10 @@ export default function LandingPage() {
           transition={{ duration: 0.8, delay: 0.2 }}
         >
           <Link
-            href="/onboarding/step-1"
-            className="inline-block bg-[#061b0e] text-[#fcf9f8] px-10 py-5 text-sm font-semibold uppercase tracking-widest hover:bg-[#c5a059] transition-colors duration-500"
+            href="/login"
+            className="inline-block bg-[#eaff00] rounded-full text-black px-10 py-5 text-sm font-bold uppercase tracking-widest hover:bg-[#d4e600] transition-colors duration-300 shadow-md"
           >
-            Start Your Legacy
+            Get Started Now
           </Link>
         </motion.div>
       </section>
@@ -230,7 +229,7 @@ export default function LandingPage() {
       {/* ─── Footer ──────────────────────────────────────────────────────────── */}
       <footer className="border-t border-[#c5a059]/20 py-8 text-center">
         <p className="text-[#737973] text-xs font-semibold uppercase tracking-[0.2em]">
-          &copy; {new Date().getFullYear()} SavorSystem. All rights reserved.
+          &copy; {new Date().getFullYear()} Nosh. All rights reserved.
         </p>
       </footer>
     </div>

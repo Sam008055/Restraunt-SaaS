@@ -25,8 +25,18 @@ export default function LoginPage() {
     setError("");
 
     try {
-      await signInWithEmailAndPassword(auth, email, password);
-      router.push("/dashboard/orders");
+      const { user } = await signInWithEmailAndPassword(auth, email, password);
+      // Check if user has a restaurant
+      const { getDocs, query, collection, where, limit } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase/client");
+      const q = query(collection(db, "restaurants"), where("ownerId", "==", user.uid), limit(1));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        router.push("/dashboard/orders");
+      } else {
+        router.push("/onboarding/step-1");
+      }
     } catch (err: any) {
       setError(err.message || "Failed to log in.");
     } finally {
@@ -43,11 +53,19 @@ export default function LoginPage() {
     setError("");
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // Wait for auth state to settle
-      // Check if user has a restaurant setup (this would ideally be done via Claims or a Firestore check)
-      // For now, redirect to dashboard.
-      router.push("/dashboard/orders");
+      const { user } = await signInWithPopup(auth, provider);
+      
+      // Check if user has a restaurant
+      const { getDocs, query, collection, where, limit } = await import("firebase/firestore");
+      const { db } = await import("@/lib/firebase/client");
+      const q = query(collection(db, "restaurants"), where("ownerId", "==", user.uid), limit(1));
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        router.push("/dashboard/orders");
+      } else {
+        router.push("/onboarding/step-1");
+      }
     } catch (err: any) {
       setError(err.message || "Failed to sign in with Google.");
     } finally {
@@ -145,12 +163,6 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-sm text-[#434843] mt-8 text-center">
-          Don't have an account?{" "}
-          <Link href="/onboarding/step-0" className="text-[#c5a059] font-semibold hover:underline">
-            Start your legacy
-          </Link>
-        </p>
       </div>
 
       {/* Right side - Image/Graphic */}

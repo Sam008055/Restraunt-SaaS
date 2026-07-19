@@ -19,7 +19,7 @@ const playfair = Playfair_Display({
 });
 
 export const metadata: Metadata = {
-  title: "SavorSystem – Restaurant QR Menu & Ordering Platform",
+  title: "Nosh – Restaurant QR Menu & Ordering Platform",
   description:
     "A multi-tenant SaaS platform for restaurant QR-based menu and ordering systems. Set up your digital menu in minutes, generate QR codes per table, and manage orders in real-time.",
 };

@@ -11,8 +11,7 @@ import {
 import { cn } from "@/lib/utils";
 import { db, auth } from "@/lib/firebase/client";
 import { collection, addDoc, serverTimestamp } from "firebase/firestore";
-import { onAuthStateChanged } from "firebase/auth";
-import { useEffect } from "react";
+
 
 const CUISINE_TYPES = [
   "Indian",
@@ -61,19 +60,6 @@ export default function OnboardingStep1() {
     logoPreview: null,
   });
   const [errors, setErrors] = useState<FormErrors>({});
-  const [authChecking, setAuthChecking] = useState(true);
-
-  useEffect(() => {
-    const unsub = onAuthStateChanged(auth, (user) => {
-      if (!user) {
-        router.replace("/login");
-      } else {
-        setAuthChecking(false);
-      }
-    });
-    return () => unsub();
-  }, [router]);
-
   const handleLogoSelect = (file: File) => {
     if (!file.type.startsWith("image/")) return;
     const reader = new FileReader();
@@ -116,6 +102,21 @@ export default function OnboardingStep1() {
         throw new Error("You must be logged in to create a restaurant.");
       }
 
+      // Check if user already has a restaurant to prevent duplicates
+      const { getDocs, query, where, limit } = await import("firebase/firestore");
+      const q = query(
+        collection(db, "restaurants"),
+        where("ownerId", "==", auth.currentUser.uid),
+        limit(1)
+      );
+      const snap = await getDocs(q);
+      
+      if (!snap.empty) {
+        // Already has one, redirect instead of creating
+        router.push(`/onboarding/step-2?id=${snap.docs[0].id}`);
+        return;
+      }
+
       // Generate a simple slug
       const slug = formData.restaurantName
         .toLowerCase()
@@ -140,14 +141,6 @@ export default function OnboardingStep1() {
       setIsSubmitting(false);
     }
   };
-
-  if (authChecking) {
-    return (
-      <div className="flex items-center justify-center py-20 text-[#74777d]">
-        Loading your account details...
-      </div>
-    );
-  }
 
   return (
     <form onSubmit={handleSubmit} noValidate>

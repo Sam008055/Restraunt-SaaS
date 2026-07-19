@@ -14,8 +14,6 @@ import {
   X,
   Check,
   Warning,
-  Sparkle,
-  Image as ImageIcon,
 } from "@phosphor-icons/react";
 import toast from "react-hot-toast";
 import { cn } from "@/lib/utils";
@@ -35,8 +33,6 @@ export default function MenuBuilder() {
   const [editingCatId, setEditingCatId] = useState<string | null>(null);
   const [newCatName, setNewCatName] = useState("");
   const [addingCat, setAddingCat] = useState(false);
-  const [isParsingImage, setIsParsingImage] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [itemModal, setItemModal] = useState<{
     mode: "add" | "edit";
     categoryId: string;
@@ -58,6 +54,7 @@ export default function MenuBuilder() {
     const catRef = doc(collection(db, "categories"));
     const newCat = {
       restaurantId: restaurantId!,
+      ownerId: restaurant?.ownerId || "",
       name: newCatName.trim(),
       order: categories.length,
       isActive: true,
@@ -113,6 +110,7 @@ export default function MenuBuilder() {
     const itemData = {
       ...itemWithoutId,
       restaurantId: restaurantId!,
+      ownerId: restaurant?.ownerId || "",
       order,
     };
 
@@ -155,100 +153,6 @@ export default function MenuBuilder() {
     setDragOverItem(null);
   };
 
-  // ── AI Menu Parsing ─────────────────────────────────────
-  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    if (file.size > 4 * 1024 * 1024) {
-      toast.error("Image too large (max 4MB)");
-      return;
-    }
-
-    setIsParsingImage(true);
-    const toastId = toast.loading("Analyzing menu with AI...");
-
-    try {
-      const reader = new FileReader();
-      reader.onloadend = async () => {
-        const base64 = reader.result?.toString().split(",")[1];
-        if (!base64) throw new Error("Failed to read image.");
-
-        const res = await fetch("/api/menu/parse", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ imageBase64: base64, mimeType: file.type }),
-        });
-
-        if (!res.ok) throw new Error("Failed to parse menu.");
-
-        const data = await res.json();
-        const parsedItems = data.items;
-
-        if (!parsedItems || parsedItems.length === 0) {
-          throw new Error("Could not find any menu items in this image.");
-        }
-
-        toast.loading(`Found ${parsedItems.length} items. Saving...`, { id: toastId });
-
-        // Save to Firestore
-        const batch = writeBatch(db);
-        
-        // Group by category to create categories first if needed
-        const newCats = Array.from(new Set(parsedItems.map((i: any) => i.category)));
-        const catMap = new Map<string, string>(); // name -> id
-
-        // Map existing categories
-        categories.forEach(c => catMap.set(c.name.toLowerCase(), c.id));
-
-        // Create missing categories
-        let currentOrder = categories.length;
-        for (const catName of newCats) {
-          const name = String(catName);
-          if (!catMap.has(name.toLowerCase())) {
-            const newCatRef = doc(collection(db, "categories"));
-            batch.set(newCatRef, {
-              restaurantId: restaurantId!,
-              name: name,
-              order: currentOrder++,
-              isActive: true,
-            });
-            catMap.set(name.toLowerCase(), newCatRef.id);
-          }
-        }
-
-        // Add items
-        parsedItems.forEach((item: any, index: number) => {
-          const catId = catMap.get(String(item.category).toLowerCase());
-          if (catId) {
-            const itemRef = doc(collection(db, "menuItems"));
-            batch.set(itemRef, {
-              restaurantId: restaurantId!,
-              categoryId: catId,
-              name: item.name,
-              price: Number(item.price) || 0,
-              description: item.description || "",
-              isVeg: Boolean(item.isVeg),
-              isAvailable: true,
-              order: index,
-              taxPercentage: 0,
-              variants: [],
-            });
-          }
-        });
-
-        await batch.commit();
-        toast.success(`Successfully added ${parsedItems.length} items!`, { id: toastId });
-      };
-      reader.readAsDataURL(file);
-    } catch (err: any) {
-      console.error("AI Parse Error:", err);
-      toast.error(err.message || "Something went wrong.", { id: toastId });
-    } finally {
-      setIsParsingImage(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  };
 
   const totalItems = categories.reduce((sum, c) => sum + c.items.length, 0);
 
@@ -266,25 +170,7 @@ export default function MenuBuilder() {
               </p>
             </div>
             <div className="flex items-center gap-2">
-              <input
-                type="file"
-                accept="image/*"
-                className="hidden"
-                ref={fileInputRef}
-                onChange={handleImageUpload}
-              />
-              <button
-                onClick={() => fileInputRef.current?.click()}
-                disabled={isParsingImage}
-                className="flex items-center gap-2 h-9 px-4 bg-gradient-to-r from-purple-600 to-indigo-600 hover:from-purple-700 hover:to-indigo-700 text-white text-sm font-semibold rounded-lg transition-colors shadow-sm disabled:opacity-70"
-              >
-                {isParsingImage ? (
-                  <Sparkle size={16} weight="fill" className="animate-pulse" />
-                ) : (
-                  <ImageIcon size={16} weight="bold" />
-                )}
-                {isParsingImage ? "Analyzing..." : "Auto-fill with AI"}
-              </button>
+
               <button
                 onClick={() => {
                   setAddingCat(true);
@@ -523,7 +409,7 @@ export default function MenuBuilder() {
         {itemModal && (
           <ItemModal
             mode={itemModal.mode}
-            initialData={itemModal.item}
+            item={itemModal.item}
             categoryId={itemModal.categoryId}
             onClose={() => setItemModal(null)}
             onSave={saveItem}

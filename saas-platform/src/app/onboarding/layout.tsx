@@ -1,12 +1,14 @@
 "use client";
 
+import { useState, useEffect } from "react";
+import { onAuthStateChanged } from "firebase/auth";
+import { auth } from "@/lib/firebase/client";
 import { motion } from "motion/react";
 import { ArrowLeft } from "@phosphor-icons/react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
 
 const STEPS = [
-  { label: "Account", href: "/onboarding/step-0" },
   { label: "Business Info", href: "/onboarding/step-1" },
   { label: "Theme & Plan", href: "/onboarding/step-2" },
   { label: "Payment", href: "/onboarding/step-3" },
@@ -18,7 +20,29 @@ export default function OnboardingLayout({
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
+  const router = useRouter();
   const currentStep = STEPS.findIndex((s) => pathname.startsWith(s.href)) + 1;
+
+  const [authChecking, setAuthChecking] = useState(true);
+
+  useEffect(() => {
+    const unsub = onAuthStateChanged(auth, (user) => {
+      if (!user) {
+        router.replace("/login");
+      } else {
+        setAuthChecking(false);
+      }
+    });
+    return () => unsub();
+  }, [router]);
+
+  if (authChecking) {
+    return (
+      <div className="min-h-dvh flex items-center justify-center bg-[#f9f9ff]">
+        <div className="animate-spin w-8 h-8 border-4 border-[#0d1b2a] border-t-transparent rounded-full" />
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-dvh flex flex-col bg-[#f9f9ff]">

@@ -8,7 +8,12 @@ import { cn } from "@/lib/utils";
 import { auth, db } from "@/lib/firebase/client";
 import { doc, updateDoc } from "firebase/firestore";
 
-export default function OnboardingStep3() {
+import { Suspense } from "react";
+
+import { useEffect } from "react";
+import { getDoc } from "firebase/firestore";
+
+function Step3Form() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const restaurantId = searchParams.get("id");
@@ -16,6 +21,25 @@ export default function OnboardingStep3() {
   const [paymentMode, setPaymentMode] = useState<"online-prepay" | "pay-at-table" | "both">("both");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [error, setError] = useState("");
+  const [planId, setPlanId] = useState<string>("pro");
+  const [isLoadingPlan, setIsLoadingPlan] = useState(true);
+
+  useEffect(() => {
+    async function fetchPlan() {
+      if (!restaurantId) return;
+      try {
+        const snap = await getDoc(doc(db, "restaurants", restaurantId));
+        if (snap.exists()) {
+          setPlanId(snap.data().plan || "pro");
+        }
+      } catch (err) {
+        console.error("Error fetching plan:", err);
+      } finally {
+        setIsLoadingPlan(false);
+      }
+    }
+    fetchPlan();
+  }, [restaurantId]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -28,23 +52,6 @@ export default function OnboardingStep3() {
     setError("");
 
     try {
-      const user = auth.currentUser;
-      const email = user?.email || "owner@restaurant.com";
-      const name = user?.displayName || "Restaurant Owner";
-
-      // 1. Create Razorpay subscription server-side
-      const res = await fetch("/api/razorpay/create-subscription", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          restaurantId,
-          email,
-          name,
-        }),
-      });
-
-      const data = await res.json();
-
       const activateRestaurant = async () => {
         await updateDoc(doc(db, "restaurants", restaurantId), {
           status: "active",
@@ -52,6 +59,30 @@ export default function OnboardingStep3() {
         });
         router.push("/dashboard/orders");
       };
+
+      // 1. If Starter (Free) plan, skip Razorpay
+      if (planId === "starter") {
+        await activateRestaurant();
+        return;
+      }
+
+      // 2. Otherwise, paid plan - Create Razorpay subscription server-side
+      const user = auth.currentUser;
+      const email = user?.email || "owner@restaurant.com";
+      const name = user?.displayName || "Restaurant Owner";
+
+      const res = await fetch("/api/razorpay/create-subscription", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          restaurantId,
+          email,
+          name,
+          planId, // Send the selected plan to the API
+        }),
+      });
+
+      const data = await res.json();
 
       // Dev bypass: Firebase/Razorpay not configured yet — skip to dashboard
       if (!res.ok || data.devBypass) {
@@ -61,7 +92,7 @@ export default function OnboardingStep3() {
 
       const { subscriptionId, orderId, keyId } = data;
 
-      // 2. Open Razorpay checkout
+      // 3. Open Razorpay checkout
       const win = window as any;
       if (!win.Razorpay) {
         await new Promise<void>((resolve, reject) => {
@@ -75,9 +106,9 @@ export default function OnboardingStep3() {
 
       const options: any = {
         key: keyId,
-        name: "SavorSystem",
-        description: "Pro Plan — 14 days free",
-        theme: { color: "#061b0e" },
+        name: "Nosh",
+        description: `${PLAN_SUMMARY.name} — 14 days free`,
+        theme: { color: "#eaff00" },
         handler: async () => {
           await activateRestaurant();
         },
@@ -102,13 +133,34 @@ export default function OnboardingStep3() {
     }
   };
 
-
-  const PLAN_SUMMARY = {
-    name: "Pro Plan",
-    price: "₹3,999/mo",
-    trial: "14 days free, then billed monthly",
-    tables: "Up to 50 tables",
+  const getPlanSummary = () => {
+    switch (planId) {
+      case "starter":
+        return {
+          name: "Starter Plan",
+          price: "₹0/mo",
+          trial: "Free forever for small setups",
+          tables: "Up to 2 tables",
+        };
+      case "growth":
+        return {
+          name: "Growth Plan",
+          price: "₹499/mo",
+          trial: "14 days free, then billed monthly",
+          tables: "Up to 15 tables",
+        };
+      case "pro":
+      default:
+        return {
+          name: "Pro Plan",
+          price: "₹1,499/mo",
+          trial: "14 days free, then billed monthly",
+          tables: "Up to 50 tables",
+        };
+    }
   };
+
+  const PLAN_SUMMARY = getPlanSummary();
 
   const PAYMENT_MODES = [
     {
@@ -128,13 +180,19 @@ export default function OnboardingStep3() {
     },
   ];
 
+  if (isLoadingPlan) {
+    return <div className="py-20 text-center text-[#74777d]">Loading plan details...</div>;
+  }
+
   return (
     <form onSubmit={handleSubmit} noValidate>
       <h1 className="text-2xl md:text-[32px] font-semibold text-[#0d1b2a] tracking-tight leading-tight mb-2">
-        Start your free trial
+        {planId === "starter" ? "Complete Setup" : "Start your free trial"}
       </h1>
       <p className="text-[#44474c] text-base leading-relaxed mb-10">
-        14 days free. Cancel any time before trial ends — no charges.
+        {planId === "starter" 
+          ? "You've selected the Free Starter plan. Ready to dive in?"
+          : "14 days free. Cancel any time before trial ends — no charges."}
       </p>
 
       {/* Order summary */}
@@ -150,13 +208,15 @@ export default function OnboardingStep3() {
             </div>
             <p className="text-sm font-semibold text-[#0d1b2a]">{PLAN_SUMMARY.price}</p>
           </div>
-          <div className="flex justify-between items-center px-5 py-4">
-            <p className="text-sm text-[#44474c]">Free trial</p>
-            <p className="text-sm font-semibold text-[#10b981]">14 days</p>
-          </div>
+          {planId !== "starter" && (
+            <div className="flex justify-between items-center px-5 py-4">
+              <p className="text-sm text-[#44474c]">Free trial</p>
+              <p className="text-sm font-semibold text-[#10b981]">14 days</p>
+            </div>
+          )}
           <div className="px-5 py-4 bg-[#f9f9ff] rounded-b-xl">
             <p className="text-xs text-[#74777d]">
-              {PLAN_SUMMARY.trial}. We&apos;ll remind you 3 days before the first charge.
+              {PLAN_SUMMARY.trial}. {planId !== "starter" && "We'll remind you 3 days before the first charge."}
             </p>
           </div>
         </div>
@@ -202,17 +262,19 @@ export default function OnboardingStep3() {
       </section>
 
       {/* Trust signals */}
-      <div className="flex flex-col sm:flex-row gap-3 mb-8">
-        {[
-          { icon: ShieldCheck, text: "Razorpay secured — PCI-DSS compliant" },
-          { icon: Lock, text: "Your card is never stored on our servers" },
-        ].map(({ icon: Icon, text }) => (
-          <div key={text} className="flex items-center gap-2 text-xs text-[#74777d]">
-            <Icon size={14} className="text-[#10b981] shrink-0" />
-            {text}
-          </div>
-        ))}
-      </div>
+      {planId !== "starter" && (
+        <div className="flex flex-col sm:flex-row gap-3 mb-8">
+          {[
+            { icon: ShieldCheck, text: "Razorpay secured — PCI-DSS compliant" },
+            { icon: Lock, text: "Your card is never stored on our servers" },
+          ].map(({ icon: Icon, text }) => (
+            <div key={text} className="flex items-center gap-2 text-xs text-[#74777d]">
+              <Icon size={14} className="text-[#10b981] shrink-0" />
+              {text}
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* Error */}
       {error && (
@@ -227,13 +289,13 @@ export default function OnboardingStep3() {
         whileTap={{ scale: 0.98 }}
         disabled={isSubmitting}
         className="w-full h-12 bg-[#10b981] hover:bg-[#059669] text-white font-semibold text-sm rounded-lg flex items-center justify-center gap-2 transition-colors disabled:opacity-60"
-        aria-label="Start free trial and proceed to payment"
+        aria-label={planId === "starter" ? "Complete setup" : "Start free trial and proceed to payment"}
       >
         {isSubmitting ? (
-          <span>Opening Razorpay...</span>
+          <span>{planId === "starter" ? "Activating..." : "Opening Razorpay..."}</span>
         ) : (
           <>
-            Start Free Trial
+            {planId === "starter" ? "Complete Setup" : "Start Free Trial"}
             <ArrowRight size={16} weight="bold" />
           </>
         )}
@@ -252,5 +314,13 @@ export default function OnboardingStep3() {
         .
       </p>
     </form>
+  );
+}
+
+export default function OnboardingStep3() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-[#74777d]">Loading...</div>}>
+      <Step3Form />
+    </Suspense>
   );
 }

@@ -4,10 +4,43 @@ import { useState, useEffect } from "react";
 import { Storefront, Bank, Receipt, CheckCircle, Warning, Spinner } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { useCurrentRestaurant } from "@/lib/firebase/hooks";
+import { db } from "@/lib/firebase/client";
+import { doc, updateDoc } from "firebase/firestore";
+import toast from "react-hot-toast";
 
 export default function SettingsPage() {
-  const { restaurantId } = useCurrentRestaurant();
+  const { restaurantId, restaurant } = useCurrentRestaurant();
   const [activeTab, setActiveTab] = useState<"general" | "payouts" | "taxes">("general");
+
+  // ── General tab state ──────────────────────────────────────────────────
+  const [generalSaving, setGeneralSaving] = useState(false);
+  const [name, setName] = useState("");
+  const [slug, setSlug] = useState("");
+
+  useEffect(() => {
+    if (restaurant) {
+      setName(restaurant.name || "");
+      setSlug(restaurant.slug || "");
+    }
+  }, [restaurant]);
+
+  const handleSaveGeneral = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!restaurantId || !name.trim() || !slug.trim()) return;
+    
+    setGeneralSaving(true);
+    try {
+      await updateDoc(doc(db, "restaurants", restaurantId), {
+        name: name.trim(),
+        slug: slug.trim().toLowerCase().replace(/\s+/g, '-'),
+      });
+      toast.success("General settings saved!");
+    } catch (err: any) {
+      toast.error(err.message || "Failed to save settings");
+    } finally {
+      setGeneralSaving(false);
+    }
+  };
 
   // ── Payouts tab state ─────────────────────────────────────────────────
   const [keyId, setKeyId] = useState("");
@@ -98,7 +131,7 @@ export default function SettingsPage() {
         <div className="flex-1 bg-white rounded-xl border border-[#e2e8f0] p-6 min-h-[400px]">
           {/* ── General Tab ─────────────────────────────────────────── */}
           {activeTab === "general" && (
-            <div className="space-y-6 max-w-md">
+            <form onSubmit={handleSaveGeneral} className="space-y-6 max-w-md">
               <h2 className="text-lg font-semibold text-[#0d1b2a] border-b border-[#f1f3ff] pb-3">
                 General Information
               </h2>
@@ -106,29 +139,36 @@ export default function SettingsPage() {
                 <label className="block text-sm font-semibold text-[#0d1b2a] mb-1.5">Restaurant Name</label>
                 <input
                   type="text"
-                  defaultValue=""
-                  placeholder="e.g. The Spice Garden"
+                  value={name}
+                  onChange={(e) => setName(e.target.value)}
+                  placeholder="e.g. The Lassi House"
                   className="w-full px-4 py-2.5 rounded-lg border-[1.5px] border-[#c4c6cc] focus:border-[#0d1b2a] outline-none text-sm"
                 />
               </div>
               <div>
                 <label className="block text-sm font-semibold text-[#0d1b2a] mb-1.5">Public Menu URL (Slug)</label>
                 <div className="flex">
-                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-[#c4c6cc] bg-[#f9f9ff] text-[#74777d] text-sm">
+                  <span className="inline-flex items-center px-3 rounded-l-lg border border-r-0 border-[#c4c6cc] bg-[#f9f9ff] text-[#74777d] text-sm whitespace-nowrap overflow-hidden">
                     savorsystem.com/r/
                   </span>
                   <input
                     type="text"
-                    defaultValue=""
-                    placeholder="the-spice-garden"
-                    className="flex-1 px-4 py-2.5 rounded-r-lg border-[1.5px] border-[#c4c6cc] focus:border-[#0d1b2a] outline-none text-sm"
+                    value={slug}
+                    onChange={(e) => setSlug(e.target.value)}
+                    placeholder="the-lassi-house"
+                    className="flex-1 px-4 py-2.5 rounded-r-lg border-[1.5px] border-[#c4c6cc] focus:border-[#0d1b2a] outline-none text-sm min-w-0"
                   />
                 </div>
               </div>
-              <button className="h-10 px-5 bg-[#10b981] hover:bg-[#059669] text-white text-sm font-semibold rounded-lg transition-colors">
+              <button 
+                type="submit"
+                disabled={generalSaving}
+                className="h-10 px-5 bg-[#10b981] hover:bg-[#059669] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-60 flex items-center gap-2"
+              >
+                {generalSaving && <Spinner size={16} className="animate-spin" />}
                 Save Changes
               </button>
-            </div>
+            </form>
           )}
 
           {/* ── Payments Tab ─────────────────────────────────────────── */}

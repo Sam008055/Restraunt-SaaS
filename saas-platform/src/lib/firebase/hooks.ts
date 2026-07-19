@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { collection, query, where, onSnapshot, orderBy, limit } from "firebase/firestore";
+import { collection, query, where, onSnapshot, orderBy, limit, doc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { db, auth } from "./client";
 import { MenuCategory, MenuItem } from "../types/menu";
@@ -7,6 +7,7 @@ import { MenuCategory, MenuItem } from "../types/menu";
 export function useCurrentRestaurant() {
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
   const [restaurant, setRestaurant] = useState<any | null>(null);
+  const [role, setRole] = useState<"owner" | "cook" | "waiter" | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -16,27 +17,48 @@ export function useCurrentRestaurant() {
       if (!user) {
         setRestaurantId(null);
         setRestaurant(null);
+        setRole(null);
         setLoading(false);
         if (unsubRestaurant) unsubRestaurant();
         return;
       }
 
-      const q = query(
-        collection(db, "restaurants"),
-        where("ownerId", "==", user.uid),
-        limit(1)
-      );
-
-      unsubRestaurant = onSnapshot(q, (snap) => {
-        if (!snap.empty) {
-          const doc = snap.docs[0];
-          setRestaurantId(doc.id);
-          setRestaurant({ id: doc.id, ...doc.data() });
+      user.getIdTokenResult().then((tokenResult) => {
+        const isStaffUser = ["cook", "waiter"].includes(tokenResult.claims.role as string);
+        
+        if (isStaffUser) {
+          setRole(tokenResult.claims.role as "cook" | "waiter");
+          const restId = tokenResult.claims.restaurantId as string;
+          unsubRestaurant = onSnapshot(doc(db, "restaurants", restId), (docSnap) => {
+            if (docSnap.exists()) {
+              setRestaurantId(docSnap.id);
+              setRestaurant({ id: docSnap.id, ...docSnap.data() });
+            } else {
+              setRestaurantId(null);
+              setRestaurant(null);
+            }
+            setLoading(false);
+          });
         } else {
-          setRestaurantId(null);
-          setRestaurant(null);
+          setRole("owner");
+          const q = query(
+            collection(db, "restaurants"),
+            where("ownerId", "==", user.uid),
+            limit(1)
+          );
+
+          unsubRestaurant = onSnapshot(q, (snap) => {
+            if (!snap.empty) {
+              const d = snap.docs[0];
+              setRestaurantId(d.id);
+              setRestaurant({ id: d.id, ...d.data() });
+            } else {
+              setRestaurantId(null);
+              setRestaurant(null);
+            }
+            setLoading(false);
+          });
         }
-        setLoading(false);
       });
     });
 
@@ -46,7 +68,7 @@ export function useCurrentRestaurant() {
     };
   }, []);
 
-  return { restaurantId, restaurant, loading };
+  return { restaurantId, restaurant, role, loading };
 }
 
 export function useRestaurantMenu(restaurantId: string | null) {
@@ -128,7 +150,7 @@ export function useRestaurantTables(restaurantId: string | null) {
     );
 
     const unsub = onSnapshot(q, (snap) => {
-      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+      const docs = snap.docs.map(d => ({ id: d.id, ...d.data() } as any));
       // Sort numerically by tableNumber
       docs.sort((a, b) => Number(a.tableNumber) - Number(b.tableNumber));
       setTables(docs);
@@ -174,4 +196,69 @@ export function useRestaurantOrders(restaurantId: string | null) {
   }, [restaurantId]);
 
   return { orders, loading };
+}
+
+export function useRestaurantStaff(restaurantId: string | null) {
+  const [staff, setStaff] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!restaurantId) {
+      setStaff([]);
+      setLoading(false);
+      return;
+    }
+
+    const q = query(
+      collection(db, "staff"),
+      where("restaurantId", "==", restaurantId)
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data()
+      }));
+      setStaff(docs);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [restaurantId]);
+
+  return { staff, loading };
+}
+
+export function useWaiterCalls(restaurantId: string | null) {
+  const [calls, setCalls] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!restaurantId) {
+      setCalls([]);
+      setLoading(false);
+      return;
+    }
+
+    // Usually fetch pending or recent calls
+    const q = query(
+      collection(db, "waiterCalls"),
+      where("restaurantId", "==", restaurantId),
+      orderBy("createdAt", "desc")
+    );
+
+    const unsub = onSnapshot(q, (snap) => {
+      const docs = snap.docs.map(d => ({ 
+        id: d.id, 
+        ...d.data(),
+        createdAt: d.data().createdAt?.toDate() || new Date()
+      }));
+      setCalls(docs);
+      setLoading(false);
+    });
+
+    return () => unsub();
+  }, [restaurantId]);
+
+  return { calls, loading };
 }

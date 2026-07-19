@@ -8,8 +8,32 @@
 import { adminDb } from "./admin";
 import { MenuCategory, MenuItem } from "@/lib/types/menu";
 
+export interface RestaurantDoc {
+  id: string;
+  name: string;
+  slug: string;
+  address?: string;
+  cuisineType?: string;
+  gstNumber?: string;
+  ownerId: string;
+  theme?: {
+    primaryColor: string;
+    accentColor: string;
+  };
+  subscription?: any;
+}
+
+export interface TableDoc {
+  id: string;
+  restaurantId: string;
+  tableNumber: string;
+  isActive: boolean;
+  slug: string;
+  qrToken: string;
+}
+
 // ─── Restaurant ───────────────────────────────────────────────────────────────
-export async function getRestaurantBySlug(slug: string) {
+export async function getRestaurantBySlug(slug: string): Promise<RestaurantDoc | null> {
   const snap = await adminDb
     .collection("restaurants")
     .where("slug", "==", slug)
@@ -18,13 +42,13 @@ export async function getRestaurantBySlug(slug: string) {
 
   if (snap.empty) return null;
   const doc = snap.docs[0];
-  return { id: doc.id, ...doc.data() };
+  return { id: doc.id, ...doc.data() } as RestaurantDoc;
 }
 
-export async function getRestaurantById(restaurantId: string) {
+export async function getRestaurantById(restaurantId: string): Promise<RestaurantDoc | null> {
   const doc = await adminDb.collection("restaurants").doc(restaurantId).get();
   if (!doc.exists) return null;
-  return { id: doc.id, ...doc.data() };
+  return { id: doc.id, ...doc.data() } as RestaurantDoc;
 }
 
 // ─── Menu ─────────────────────────────────────────────────────────────────────
@@ -60,19 +84,19 @@ export async function getMenuForRestaurant(restaurantId: string): Promise<MenuCa
 }
 
 // ─── Tables ───────────────────────────────────────────────────────────────────
-export async function getTableById(tableId: string) {
+export async function getTableById(tableId: string): Promise<TableDoc | null> {
   const doc = await adminDb.collection("tables").doc(tableId).get();
   if (!doc.exists) return null;
-  return { id: doc.id, ...doc.data() };
+  return { id: doc.id, ...doc.data() } as TableDoc;
 }
 
-export async function getTablesForRestaurant(restaurantId: string) {
+export async function getTablesForRestaurant(restaurantId: string): Promise<TableDoc[]> {
   const snap = await adminDb
     .collection("tables")
     .where("restaurantId", "==", restaurantId)
     .orderBy("tableNumber")
     .get();
-  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() }));
+  return snap.docs.map((doc) => ({ id: doc.id, ...doc.data() } as TableDoc));
 }
 
 // ─── Orders ───────────────────────────────────────────────────────────────────

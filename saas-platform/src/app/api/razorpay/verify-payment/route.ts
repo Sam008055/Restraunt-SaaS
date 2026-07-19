@@ -30,6 +30,7 @@ export async function POST(req: NextRequest) {
       razorpaySignature,
       cartItems,
       totalPaise,
+      customerName,
     } = body;
 
     // 1. Fetch restaurant's keys to verify signature
@@ -67,6 +68,7 @@ export async function POST(req: NextRequest) {
       paymentMethod: "razorpay",
       razorpayOrderId,
       razorpayPaymentId,
+      customerName: customerName || null,
       createdAt: new Date(),
     });
 

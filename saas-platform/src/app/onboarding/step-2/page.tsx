@@ -47,32 +47,47 @@ const THEMES = [
 /* ─── Subscription plans ─── */
 const PLANS = [
   {
-    id: "basic",
-    name: "Basic",
-    price: "₹1,499",
+    id: "starter",
+    name: "Starter (Free)",
+    price: "₹0",
     period: "/mo",
-    description: "Perfect for a single-outlet restaurant",
+    description: "Perfect for testing the waters",
     features: [
-      "Up to 10 tables",
+      "Up to 2 tables",
       "Digital QR menu",
       "Order management dashboard",
       "Standard analytics",
+      "Community support",
+    ],
+    tableLimit: 2,
+    isRecommended: false,
+  },
+  {
+    id: "growth",
+    name: "Growth",
+    price: "₹499",
+    period: "/mo",
+    description: "For growing cafes and local spots",
+    features: [
+      "Up to 15 tables",
+      "Everything in Starter",
+      "Basic POS integrations",
       "Email support",
     ],
-    tableLimit: 10,
+    tableLimit: 15,
     isRecommended: false,
   },
   {
     id: "pro",
     name: "Pro",
-    price: "₹3,999",
+    price: "₹1,499",
     period: "/mo",
-    description: "For growing restaurants & multi-outlet chains",
+    description: "For established restaurants & multi-outlet chains",
     features: [
       "Up to 50 tables",
-      "Everything in Basic",
+      "Everything in Growth",
       "Online pre-pay (Razorpay)",
-      "Custom domain support",
+      "Staff management (KDS & Waiter)",
       "Advanced CRM & analytics",
       "Priority support",
     ],
@@ -88,7 +103,9 @@ const FONT_OPTIONS = [
   { label: "Satoshi", value: "satoshi" },
 ];
 
-export default function OnboardingStep2() {
+import { Suspense } from "react";
+
+function Step2Form() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const restaurantId = searchParams.get("id");
@@ -266,7 +283,7 @@ export default function OnboardingStep2() {
         <h2 id="plan-heading" className="text-xs font-semibold tracking-widest text-[#415a77] uppercase mb-5">
           Subscription Plan
         </h2>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {PLANS.map((plan) => {
             const isSelected = selectedPlan === plan.id;
             return (
@@ -345,5 +362,13 @@ export default function OnboardingStep2() {
         )}
       </motion.button>
     </form>
+  );
+}
+
+export default function OnboardingStep2() {
+  return (
+    <Suspense fallback={<div className="py-20 text-center text-[#74777d]">Loading...</div>}>
+      <Step2Form />
+    </Suspense>
   );
 }

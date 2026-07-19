@@ -1,8 +1,8 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion } from "motion/react";
-import { X, Plus, Trash, ArrowRight } from "@phosphor-icons/react";
+import { X, Plus, Trash, ArrowRight, UploadSimple, Link as LinkIcon, Image as ImageIcon } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { MenuItem, MenuVariant, MenuAddOn } from "@/lib/types/menu";
 
@@ -29,6 +29,7 @@ export default function ItemModal({
     name: "",
     description: "",
     price: 0,
+    imageUrl: "",
     isVeg: true,
     isAvailable: true,
     taxPercentage: 5,
@@ -40,6 +41,12 @@ export default function ItemModal({
   const [form, setForm] = useState<MenuItem>(item ?? blank);
   const [errors, setErrors] = useState<{ name?: string; price?: string }>({});
   const [activeTab, setActiveTab] = useState<"basic" | "variants" | "addons">("basic");
+
+  // Image state
+  const [imageMode, setImageMode] = useState<"url" | "upload">("url");
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Keep id stable on edit
   useEffect(() => {
@@ -56,6 +63,53 @@ export default function ItemModal({
 
   const handleSave = () => {
     if (validate()) onSave(form);
+  };
+
+  // ── Cloudinary upload ─────────────────────────────
+  const handleFileUpload = async (file: File) => {
+    const cloudName = process.env.NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME;
+    const uploadPreset = process.env.NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET;
+
+    if (!cloudName || !uploadPreset) {
+      setUploadError("Cloudinary is not configured. Add NEXT_PUBLIC_CLOUDINARY_CLOUD_NAME and NEXT_PUBLIC_CLOUDINARY_UPLOAD_PRESET to your .env.local file.");
+      return;
+    }
+
+    if (!file.type.startsWith("image/")) {
+      setUploadError("Please select a valid image file.");
+      return;
+    }
+
+    if (file.size > 5 * 1024 * 1024) {
+      setUploadError("Image must be smaller than 5MB.");
+      return;
+    }
+
+    setUploading(true);
+    setUploadError(null);
+
+    try {
+      const formData = new FormData();
+      formData.append("file", file);
+      formData.append("upload_preset", uploadPreset);
+      formData.append("folder", "nosh-menu");
+
+      const res = await fetch(
+        `https://api.cloudinary.com/v1_1/${cloudName}/image/upload`,
+        { method: "POST", body: formData }
+      );
+
+      if (!res.ok) throw new Error("Upload failed");
+
+      const data = await res.json();
+      // Use the optimized URL from Cloudinary
+      const optimizedUrl = data.secure_url.replace("/upload/", "/upload/w_800,q_auto,f_auto/");
+      setForm((p) => ({ ...p, imageUrl: optimizedUrl }));
+    } catch (err: any) {
+      setUploadError("Upload failed. Check your Cloudinary credentials.");
+    } finally {
+      setUploading(false);
+    }
   };
 
   const addVariant = () => {
@@ -285,6 +339,114 @@ export default function ItemModal({
                     ))}
                   </div>
                 </div>
+              </div>
+
+              {/* ── Food Image ────────────────────────────────────── */}
+              <div>
+                <label className="block text-sm font-semibold text-[#0d1b2a] mb-2">
+                  Food Image <span className="text-[#74777d] font-normal">(optional)</span>
+                </label>
+
+                {/* Mode toggle */}
+                <div className="flex rounded-lg border border-[#e2e8f0] overflow-hidden mb-3">
+                  <button
+                    type="button"
+                    onClick={() => setImageMode("url")}
+                    className={cn(
+                      "flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors",
+                      imageMode === "url" ? "bg-[#0d1b2a] text-white" : "text-[#74777d] hover:bg-[#f1f3ff]"
+                    )}
+                  >
+                    <LinkIcon size={12} />
+                    Paste URL
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setImageMode("upload")}
+                    className={cn(
+                      "flex-1 py-2 text-xs font-semibold flex items-center justify-center gap-1.5 transition-colors",
+                      imageMode === "upload" ? "bg-[#0d1b2a] text-white" : "text-[#74777d] hover:bg-[#f1f3ff]"
+                    )}
+                  >
+                    <UploadSimple size={12} />
+                    Upload Image
+                  </button>
+                </div>
+
+                {imageMode === "url" ? (
+                  <input
+                    type="url"
+                    value={form.imageUrl || ""}
+                    onChange={(e) => setForm((p) => ({ ...p, imageUrl: e.target.value }))}
+                    placeholder="https://example.com/your-food-image.jpg"
+                    className="w-full px-4 py-2.5 rounded-lg border-[1.5px] border-[#c4c6cc] focus:border-[#0d1b2a] bg-white text-sm text-[#0d1b2a] placeholder-[#74777d] focus:outline-none focus:ring-2 focus:ring-[#0d1b2a]/10 transition"
+                  />
+                ) : (
+                  <div>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) handleFileUpload(file);
+                      }}
+                    />
+                    <button
+                      type="button"
+                      onClick={() => fileInputRef.current?.click()}
+                      disabled={uploading}
+                      className={cn(
+                        "w-full h-24 rounded-lg border-2 border-dashed flex flex-col items-center justify-center gap-2 transition-colors",
+                        uploading
+                          ? "border-[#0d1b2a]/30 text-[#74777d] cursor-wait"
+                          : "border-[#c4c6cc] text-[#74777d] hover:border-[#0d1b2a] hover:text-[#0d1b2a]"
+                      )}
+                    >
+                      {uploading ? (
+                        <>
+                          <div className="w-5 h-5 rounded-full border-2 border-[#0d1b2a] border-t-transparent animate-spin" />
+                          <p className="text-xs">Uploading to Cloudinary…</p>
+                        </>
+                      ) : (
+                        <>
+                          <UploadSimple size={20} />
+                          <p className="text-xs font-semibold">Click to upload image</p>
+                          <p className="text-[10px]">PNG, JPG, WEBP — max 5MB</p>
+                        </>
+                      )}
+                    </button>
+                    {uploadError && (
+                      <p className="mt-2 text-xs text-red-500">{uploadError}</p>
+                    )}
+                  </div>
+                )}
+
+                {/* Image preview */}
+                {form.imageUrl && (
+                  <div className="mt-3 relative rounded-xl overflow-hidden border border-[#e2e8f0] h-28">
+                    <img
+                      src={form.imageUrl}
+                      alt="Preview"
+                      className="w-full h-full object-cover"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setForm((p) => ({ ...p, imageUrl: "" }))}
+                      className="absolute top-2 right-2 w-6 h-6 bg-black/60 text-white rounded-full flex items-center justify-center hover:bg-black/80 transition"
+                      aria-label="Remove image"
+                    >
+                      <X size={10} />
+                    </button>
+                    <div className="absolute bottom-0 inset-x-0 bg-gradient-to-t from-black/50 to-transparent px-3 py-2">
+                      <p className="text-[10px] text-white/80 flex items-center gap-1">
+                        <ImageIcon size={10} />
+                        Image set — customers will see this in the menu
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
             </>
           )}

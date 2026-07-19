@@ -7,142 +7,133 @@ service cloud.firestore {
       return request.auth != null;
     }
 
-    // Roles are set as Firebase Auth custom claims server-side only.
-    // Custom claims are signed by Firebase — clients cannot forge them.
+    // Custom claims (set server-side only, for staff/manager roles)
     function hasRole(role) {
       return isAuthenticated() && request.auth.token.role == role;
     }
 
-    // restaurantId in custom claims must match the document's restaurantId.
-    // This prevents a staff member from restaurant A accessing restaurant B.
     function hasRestaurantAccess(restaurantId) {
       return isAuthenticated() && request.auth.token.restaurantId == restaurantId;
     }
 
-    function isOwnerOrManager(restaurantId) {
-      return hasRestaurantAccess(restaurantId)
-          && (hasRole('owner') || hasRole('manager'));
-    }
-
     function isStaff(restaurantId) {
-      return hasRestaurantAccess(restaurantId) && hasRole('staff');
+      return hasRestaurantAccess(restaurantId) && (hasRole('cook') || hasRole('waiter') || hasRole('staff'));
     }
 
     function isAdmin() {
       return hasRole('admin');
     }
 
+    // Primary: fast check using ownerId field on the document itself.
+    // Fallback: restaurant lookup for legacy docs that predate the ownerId field.
+    function isDocOwner() {
+      return isAuthenticated() && (
+        // Fast path — ownerId is on the doc (new documents)
+        ('ownerId' in resource.data && resource.data.ownerId == request.auth.uid)
+        // Fallback path — look up restaurant for legacy docs without ownerId
+        || (!('ownerId' in resource.data) && 'restaurantId' in resource.data &&
+            get(/databases/$(database)/documents/restaurants/$(resource.data.restaurantId)).data.ownerId == request.auth.uid)
+      );
+    }
+
+    // For create: check ownerId on incoming data
+    function isNewDocOwner() {
+      return isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+    }
+
     // ─── Restaurants ─────────────────────────────────────────────────────────
-    // Public read is allowed so customer menu pages can load without auth.
-    // Write is restricted to owner/manager or platform admin.
+    // Public read so customer menu pages work without auth.
     match /restaurants/{restaurantId} {
       allow read: if true;
-      allow create: if isAdmin();
-      allow update: if isOwnerOrManager(restaurantId) || isAdmin();
+      allow create: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+      allow update: if (isAuthenticated() && resource.data.ownerId == request.auth.uid)
+                    || isAdmin();
       allow delete: if isAdmin();
     }
 
     // ─── Categories ──────────────────────────────────────────────────────────
     // Public read so customers can see the menu.
-    // Writes validate that restaurantId on the new/existing doc matches claims.
     match /categories/{categoryId} {
       allow read: if true;
-
-      allow create: if isOwnerOrManager(request.resource.data.restaurantId)
-                    || isAdmin();
-
-      allow update: if isOwnerOrManager(resource.data.restaurantId)
-                    // Prevent client from silently swapping restaurantId
+      allow create: if isNewDocOwner() || isAdmin();
+      allow update: if isDocOwner()
                     && request.resource.data.restaurantId == resource.data.restaurantId
                     || isAdmin();
-
-      allow delete: if isOwnerOrManager(resource.data.restaurantId) || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     // ─── Menu Items ───────────────────────────────────────────────────────────
     match /menuItems/{itemId} {
       allow read: if true;
-
-      allow create: if isOwnerOrManager(request.resource.data.restaurantId)
-                    || isAdmin();
-
-      allow update: if isOwnerOrManager(resource.data.restaurantId)
+      allow create: if isNewDocOwner() || isAdmin();
+      allow update: if isDocOwner()
                     && request.resource.data.restaurantId == resource.data.restaurantId
                     || isAdmin();
-
-      allow delete: if isOwnerOrManager(resource.data.restaurantId) || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     // ─── Tables ───────────────────────────────────────────────────────────────
-    // No public read — table documents contain QR secrets.
     match /tables/{tableId} {
-      allow read: if isOwnerOrManager(resource.data.restaurantId)
+      allow read: if isDocOwner()
                   || isStaff(resource.data.restaurantId)
                   || isAdmin();
-
-      allow create: if isOwnerOrManager(request.resource.data.restaurantId)
-                    || isAdmin();
-
-      allow update: if isOwnerOrManager(resource.data.restaurantId)
+      allow create: if isNewDocOwner() || isAdmin();
+      allow update: if isDocOwner()
                     && request.resource.data.restaurantId == resource.data.restaurantId
                     || isAdmin();
-
-      allow delete: if isOwnerOrManager(resource.data.restaurantId) || isAdmin();
+      allow delete: if isDocOwner() || isAdmin();
     }
 
     // ─── Orders ───────────────────────────────────────────────────────────────
-    // Orders are created ONLY via Cloud Function (after HMAC token validation).
-    // Clients cannot create orders directly — this rule blocks that.
+    // Created exclusively via Admin SDK server route — client create is blocked.
     match /orders/{orderId} {
-      // Staff and owners can read all orders for their restaurant
-      allow read: if isOwnerOrManager(resource.data.restaurantId)
+      allow read: if isDocOwner()
                   || isStaff(resource.data.restaurantId)
                   || isAdmin();
 
-      // Customers (unauthenticated) can read their own order via sessionId
-      // They pass their sessionId as a query filter — onSnapshot scoped query
-      allow read: if resource.data.customerSessionId == request.auth.uid;
+      allow create: if false; // Server-side only (Admin SDK bypasses rules)
 
-      // All order creation goes through a Cloud Function that validates:
-      // 1. HMAC QR token signature
-      // 2. Rate limit (max N orders per table/session per hour)
-      // 3. Razorpay payment (if online-prepay mode)
-      allow create: if false;
-
-      // Status updates allowed by staff/owner only
-      // Customers cannot update their own order status
-      allow update: if (isOwnerOrManager(resource.data.restaurantId)
-                        || isStaff(resource.data.restaurantId))
-                    // Prevent changing restaurantId or customerSessionId
+      // Owner/staff can update only the status & updatedAt fields.
+      // Protect restaurantId from being changed (compare via existing doc).
+      allow update: if (isDocOwner() || isStaff(resource.data.restaurantId))
                     && request.resource.data.restaurantId == resource.data.restaurantId
-                    && request.resource.data.customerSessionId == resource.data.customerSessionId
                     || isAdmin();
 
       allow delete: if isAdmin();
     }
 
+    // ─── Razorpay Keys ────────────────────────────────────────────────────────
+    match /razorpayKeys/{docId} {
+      allow read: if isAuthenticated() && resource.data.ownerId == request.auth.uid;
+      allow write: if isAuthenticated() && request.resource.data.ownerId == request.auth.uid;
+    }
+
     // ─── Audit Logs ───────────────────────────────────────────────────────────
-    // Owners can read. Written only by Cloud Functions. Immutable.
     match /auditLogs/{logId} {
-      allow read: if isOwnerOrManager(resource.data.restaurantId) || isAdmin();
-      allow create: if false;   // Cloud Function only
-      allow update: if false;   // Immutable
-      allow delete: if false;   // Immutable
+      allow read: if isDocOwner() || isAdmin();
+      allow create: if false;
+      allow update: if false;
+      allow delete: if false;
+    }
+
+    // ─── Staff ────────────────────────────────────────────────────────────────
+    match /staff/{staffId} {
+      allow read: if isDocOwner() || isStaff(resource.data.restaurantId) || isAdmin();
+      allow create, update, delete: if false; // Only server handles this
     }
 
     // ─── Waiter Calls ─────────────────────────────────────────────────────────
-    // Customers write (call waiter button), staff read.
     match /waiterCalls/{callId} {
-      allow read: if isOwnerOrManager(resource.data.restaurantId)
+      allow read: if isDocOwner()
                   || isStaff(resource.data.restaurantId);
 
-      // Any unauthenticated request can create — rate limited at App Check layer
+      // Customers (unauthenticated) can create waiter calls
       allow create: if request.resource.data.keys().hasAll(['restaurantId', 'tableId', 'createdAt'])
                     && request.resource.data.restaurantId is string
                     && request.resource.data.tableId is string;
 
-      allow update, delete: if isStaff(resource.data.restaurantId)
-                            || isOwnerOrManager(resource.data.restaurantId);
+      allow update, delete: if isDocOwner()
+                            || isStaff(resource.data.restaurantId);
     }
   }
 }

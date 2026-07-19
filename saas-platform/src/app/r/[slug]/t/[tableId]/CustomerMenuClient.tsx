@@ -9,9 +9,9 @@ import {
   ShoppingCart,
   Bell,
   CheckCircle,
-  Clock,
   Fire,
   Storefront,
+  Lock,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
 import { CartItem } from "@/lib/types/order";
@@ -21,6 +21,7 @@ interface CustomerMenuClientProps {
   restaurant: {
     id: string;
     name: string;
+    plan: string;
     theme: {
       primaryColor: string;
       accentColor: string;
@@ -39,8 +40,12 @@ export default function CustomerMenuClient({
   tableId,
   categories,
 }: CustomerMenuClientProps) {
+  // View-only mode for Starter plan — no ordering, just a digital menu
+  const isViewOnly = restaurant.plan === "starter";
+
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const [customerName, setCustomerName] = useState("");
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
   const [activeCategory, setActiveCategory] = useState(categories[0]?.id ?? "");
   const [flyingItem, setFlyingItem] = useState<string | null>(null);
@@ -53,6 +58,7 @@ export default function CustomerMenuClient({
 
   // ── Cart helpers ────────────────────────────────────
   const addToCart = useCallback((item: MenuItem, variantName?: string, variantPrice?: number) => {
+    if (isViewOnly) return;
     const resolvedPrice = variantPrice ?? item.price;
     const cartId = `${item.id}-${variantName ?? "base"}`;
 
@@ -79,16 +85,17 @@ export default function CustomerMenuClient({
         },
       ];
     });
-  }, []);
+  }, [isViewOnly]);
 
   const updateQty = useCallback((cartId: string, delta: number) => {
+    if (isViewOnly) return;
     setCart((prev) => {
       const updated = prev.map((c) =>
         c.id === cartId ? { ...c, quantity: c.quantity + delta } : c
       );
       return updated.filter((c) => c.quantity > 0);
     });
-  }, []);
+  }, [isViewOnly]);
 
   const getItemQty = (itemId: string, variantName?: string) => {
     const cartId = `${itemId}-${variantName ?? "base"}`;
@@ -97,11 +104,11 @@ export default function CustomerMenuClient({
 
   // ── Order placement ──────────────────────────────────
   const placeOrder = async (paymentMode: "online" | "pay-at-table") => {
+    if (isViewOnly) return;
     setOrderStatus("placing");
     setCartOpen(false);
 
     if (paymentMode === "pay-at-table") {
-      // Write order directly to Firestore via API — no payment needed
       await fetch("/api/orders/place", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -112,6 +119,7 @@ export default function CustomerMenuClient({
           cartItems: cart,
           totalPaise: total * 100,
           paymentMethod: "pay-at-table",
+          customerName,
         }),
       });
       setOrderStatus("received");
@@ -120,7 +128,6 @@ export default function CustomerMenuClient({
 
     // ── Online payment via Razorpay ──────────────────
     try {
-      // 1. Create Razorpay order server-side (uses restaurant's own keys)
       const res = await fetch("/api/razorpay/create-order", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -141,10 +148,8 @@ export default function CustomerMenuClient({
 
       const { orderId, amount, currency, keyId } = await res.json();
 
-      // 2. Load Razorpay checkout
       const win = window as any;
       if (!win.Razorpay) {
-        // Lazy-load the Razorpay checkout script
         await new Promise<void>((resolve, reject) => {
           const script = document.createElement("script");
           script.src = "https://checkout.razorpay.com/v1/checkout.js";
@@ -164,7 +169,6 @@ export default function CustomerMenuClient({
           description: `Table ${tableNumber} — ${cart.length} item(s)`,
           theme: { color: restaurant.theme.primaryColor },
           handler: async (response: any) => {
-            // 3. Verify payment server-side and create order in Firestore
             const verifyRes = await fetch("/api/razorpay/verify-payment", {
               method: "POST",
               headers: { "Content-Type": "application/json" },
@@ -177,6 +181,7 @@ export default function CustomerMenuClient({
                 razorpaySignature: response.razorpay_signature,
                 cartItems: cart,
                 totalPaise: total * 100,
+                customerName,
               }),
             });
 
@@ -260,6 +265,12 @@ export default function CustomerMenuClient({
             <p className="text-white/60 text-xs mt-0.5">Table {tableNumber}</p>
           </div>
           <div className="flex items-center gap-2">
+            {isViewOnly && (
+              <span className="flex items-center gap-1.5 h-7 px-3 rounded-full bg-white/10 text-white/70 text-[10px] font-semibold">
+                <Lock size={10} weight="fill" />
+                View Only
+              </span>
+            )}
             <button
               onClick={callWaiter}
               className="flex items-center gap-1.5 h-9 px-3 rounded-full bg-white/10 text-white text-xs font-semibold hover:bg-white/20 transition active:scale-95"
@@ -388,7 +399,9 @@ export default function CustomerMenuClient({
                     getItemQty={getItemQty}
                     onAdd={addToCart}
                     onUpdateQty={updateQty}
-                    disabled={orderStatus !== "idle"}
+                    disabled={orderStatus !== "idle" || isViewOnly}
+                    viewOnly={isViewOnly}
+                    primaryColor={restaurant.theme.primaryColor}
                   />
                 ))}
             </div>
@@ -396,9 +409,9 @@ export default function CustomerMenuClient({
         ))}
       </main>
 
-      {/* ── Sticky cart bar ── */}
+      {/* ── Sticky cart bar (hidden in view-only mode) ── */}
       <AnimatePresence>
-        {cartCount > 0 && orderStatus === "idle" && (
+        {!isViewOnly && cartCount > 0 && orderStatus === "idle" && (
           <motion.div
             initial={{ y: 100, opacity: 0 }}
             animate={{ y: 0, opacity: 1 }}
@@ -536,6 +549,17 @@ export default function CustomerMenuClient({
                 ))}
               </div>
 
+              {/* Customer Name Input */}
+              <div className="px-5 py-2">
+                <input
+                  type="text"
+                  placeholder="Your Name (optional)"
+                  value={customerName}
+                  onChange={(e) => setCustomerName(e.target.value)}
+                  className="w-full h-10 px-3 rounded-lg border border-[#e2e8f0] text-sm focus:outline-none focus:border-[#0d1b2a] transition-colors"
+                />
+              </div>
+
               {/* Bill summary */}
               <div className="border-t border-[#f1f3ff] px-5 py-4 space-y-2">
                 <div className="flex justify-between text-sm text-[#44474c]">
@@ -589,6 +613,8 @@ function MenuItemCard({
   onAdd,
   onUpdateQty,
   disabled,
+  viewOnly,
+  primaryColor,
 }: {
   item: MenuItem;
   flyingItem: string | null;
@@ -596,9 +622,10 @@ function MenuItemCard({
   onAdd: (item: MenuItem, variantName?: string, variantPrice?: number) => void;
   onUpdateQty: (cartId: string, delta: number) => void;
   disabled: boolean;
+  viewOnly: boolean;
+  primaryColor: string;
 }) {
   const hasVariants = item.variants.length > 0;
-  const [showVariants, setShowVariants] = useState(false);
 
   // For items without variants, show inline +/- controls
   const baseCartId = `${item.id}-base`;
@@ -606,143 +633,218 @@ function MenuItemCard({
   const isFlying = flyingItem === baseCartId;
 
   return (
-    <div className="bg-white rounded-2xl p-4 flex gap-3 shadow-[0_1px_4px_rgba(13,27,42,0.06)]">
-      {/* Veg/non-veg dot */}
-      <div className="pt-0.5 shrink-0">
-        <div
-          className={cn(
-            "w-4 h-4 rounded-sm border-2 flex items-center justify-center",
-            item.isVeg ? "border-green-600" : "border-red-600"
-          )}
-        >
-          <div
-            className={cn(
-              "w-2 h-2 rounded-full",
-              item.isVeg ? "bg-green-600" : "bg-red-600"
-            )}
+    <div className="bg-white rounded-2xl overflow-hidden shadow-[0_1px_4px_rgba(13,27,42,0.06)]">
+      {/* Food Image */}
+      {item.imageUrl && (
+        <div className="relative w-full h-36 bg-[#f1f3ff]">
+          <img
+            src={item.imageUrl}
+            alt={item.name}
+            className="w-full h-full object-cover"
+            loading="lazy"
           />
         </div>
-      </div>
+      )}
 
-      {/* Content */}
-      <div className="flex-1 min-w-0">
-        <h3 className="text-sm font-semibold text-[#0d1b2a] leading-snug">{item.name}</h3>
-        {item.description && (
-          <p className="text-xs text-[#74777d] mt-0.5 leading-relaxed line-clamp-2">
-            {item.description}
-          </p>
-        )}
-        <p className="text-sm font-semibold text-[#0d1b2a] mt-2">
-          ₹{item.price}
-          {hasVariants && (
-            <span className="text-xs font-normal text-[#74777d]"> onwards</span>
+      <div className="p-4 flex gap-3">
+        {/* Veg/non-veg dot */}
+        <div className="pt-0.5 shrink-0">
+          <div
+            className={cn(
+              "w-4 h-4 rounded-sm border-2 flex items-center justify-center",
+              item.isVeg ? "border-green-600" : "border-red-600"
+            )}
+          >
+            <div
+              className={cn(
+                "w-2 h-2 rounded-full",
+                item.isVeg ? "bg-green-600" : "bg-red-600"
+              )}
+            />
+          </div>
+        </div>
+
+        {/* Content */}
+        <div className="flex-1 min-w-0">
+          <h3 className="text-sm font-semibold text-[#0d1b2a] leading-snug">{item.name}</h3>
+          {item.description && (
+            <p className="text-xs text-[#74777d] mt-0.5 leading-relaxed line-clamp-2">
+              {item.description}
+            </p>
           )}
-        </p>
+          <p className="text-sm font-semibold text-[#0d1b2a] mt-2">
+            ₹{hasVariants ? Math.min(item.price, ...item.variants.map((v) => v.price)) : item.price}
+            {hasVariants && (
+              <span className="text-xs font-normal text-[#74777d]"> onwards</span>
+            )}
+          </p>
 
-        {/* Variant chips */}
-        {hasVariants && (
-          <div className="mt-2 flex flex-wrap gap-1.5">
-            {item.variants.map((v) => {
-              const vCartId = `${item.id}-${v.name}`;
-              const vQty = getItemQty(item.id, v.name);
-              return (
-                <div key={v.id} className="flex items-center gap-1">
-                  {vQty > 0 ? (
-                    <div className="flex items-center gap-1 bg-[#f1f3ff] rounded-full px-2 py-1">
-                      <button
-                        onClick={() => onUpdateQty(vCartId, -1)}
-                        disabled={disabled}
-                        className="w-5 h-5 rounded-full border border-[#e2e8f0] flex items-center justify-center text-[#44474c] active:scale-90"
-                        aria-label={`Remove ${v.name}`}
-                      >
-                        <Minus size={9} weight="bold" />
-                      </button>
-                      <span className="text-xs font-semibold text-[#0d1b2a] w-4 text-center">
-                        {vQty}
-                      </span>
+          {/* Variant chips — hidden in view-only mode */}
+          {!viewOnly && hasVariants && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {item.variants.map((v) => {
+                const vCartId = `${item.id}-${v.name}`;
+                const vQty = getItemQty(item.id, v.name);
+                return (
+                  <div key={v.id} className="flex items-center gap-1">
+                    {vQty > 0 ? (
+                      <div className="flex items-center gap-1 bg-[#f1f3ff] rounded-full px-2 py-1">
+                        <button
+                          onClick={() => onUpdateQty(vCartId, -1)}
+                          disabled={disabled}
+                          className="w-5 h-5 rounded-full border border-[#e2e8f0] flex items-center justify-center text-[#44474c] active:scale-90"
+                          aria-label={`Remove ${v.name}`}
+                        >
+                          <Minus size={9} weight="bold" />
+                        </button>
+                        <span className="text-xs font-semibold text-[#0d1b2a] w-4 text-center">
+                          {vQty}
+                        </span>
+                        <button
+                          onClick={() => onAdd(item, v.name, v.price)}
+                          disabled={disabled}
+                          className="w-5 h-5 rounded-full bg-[#0d1b2a] flex items-center justify-center text-white active:scale-90"
+                          aria-label={`Add more ${v.name}`}
+                        >
+                          <Plus size={9} weight="bold" />
+                        </button>
+                        <span className="text-xs text-[#74777d] ml-0.5">{v.name}</span>
+                      </div>
+                    ) : (
                       <button
                         onClick={() => onAdd(item, v.name, v.price)}
                         disabled={disabled}
-                        className="w-5 h-5 rounded-full bg-[#0d1b2a] flex items-center justify-center text-white active:scale-90"
-                        aria-label={`Add more ${v.name}`}
+                        className="h-7 px-3 rounded-full border border-[#e2e8f0] text-xs font-medium text-[#44474c] hover:border-[#0d1b2a] hover:text-[#0d1b2a] active:scale-95 transition"
+                        aria-label={`Add ${v.name} — ₹${v.price}`}
                       >
-                        <Plus size={9} weight="bold" />
+                        {v.name} · ₹{v.price}
                       </button>
-                      <span className="text-xs text-[#74777d] ml-0.5">{v.name}</span>
-                    </div>
-                  ) : (
-                    <button
-                      onClick={() => onAdd(item, v.name, v.price)}
-                      disabled={disabled}
-                      className="h-7 px-3 rounded-full border border-[#e2e8f0] text-xs font-medium text-[#44474c] hover:border-[#0d1b2a] hover:text-[#0d1b2a] active:scale-95 transition"
-                      aria-label={`Add ${v.name} — ₹${v.price}`}
-                    >
-                      {v.name} · ₹{v.price}
-                    </button>
-                  )}
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
 
-      {/* Add button (no-variant items) */}
-      {!hasVariants && (
-        <div className="shrink-0 self-center">
-          <AnimatePresence mode="wait">
-            {baseQty > 0 ? (
-              <motion.div
-                key="controls"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                className="flex items-center gap-2"
-              >
-                <button
-                  onClick={() => onUpdateQty(baseCartId, -1)}
-                  disabled={disabled}
-                  className="w-8 h-8 rounded-full border border-[#e2e8f0] flex items-center justify-center text-[#44474c] active:scale-90 transition"
-                  aria-label={`Remove one ${item.name}`}
+          {/* Variant display in view-only mode */}
+          {viewOnly && hasVariants && (
+            <div className="mt-2 flex flex-wrap gap-1.5">
+              {item.variants.map((v) => (
+                <span
+                  key={v.id}
+                  className="h-7 px-3 rounded-full border border-[#e2e8f0] text-xs font-medium text-[#74777d] flex items-center"
                 >
-                  <Minus size={12} weight="bold" />
-                </button>
-                <span className="text-sm font-semibold text-[#0d1b2a] w-5 text-center">
-                  {baseQty}
+                  {v.name} · ₹{v.price}
                 </span>
+              ))}
+            </div>
+          )}
+
+          {/* Add-on chips — hidden in view-only mode */}
+          {!viewOnly && item.addOns && item.addOns.length > 0 && (
+            <div className="mt-2 flex flex-wrap gap-1.5 pt-2 border-t border-[#f1f3ff]">
+              {item.addOns.map((a) => {
+                const aCartId = `${item.id}-+ ${a.name}`;
+                const aQty = getItemQty(item.id, `+ ${a.name}`);
+                return (
+                  <div key={a.id} className="flex items-center gap-1">
+                    {aQty > 0 ? (
+                      <div className="flex items-center gap-1 bg-[#f1f3ff] rounded-full px-2 py-1">
+                        <button
+                          onClick={() => onUpdateQty(aCartId, -1)}
+                          disabled={disabled}
+                          className="w-5 h-5 rounded-full border border-[#e2e8f0] flex items-center justify-center text-[#44474c] active:scale-90"
+                          aria-label={`Remove ${a.name}`}
+                        >
+                          <Minus size={9} weight="bold" />
+                        </button>
+                        <span className="text-xs font-semibold text-[#0d1b2a] w-4 text-center">
+                          {aQty}
+                        </span>
+                        <button
+                          onClick={() => onAdd(item, `+ ${a.name}`, a.price)}
+                          disabled={disabled}
+                          className="w-5 h-5 rounded-full bg-[#0d1b2a] flex items-center justify-center text-white active:scale-90"
+                          aria-label={`Add more ${a.name}`}
+                        >
+                          <Plus size={9} weight="bold" />
+                        </button>
+                        <span className="text-xs text-[#74777d] ml-0.5">+{a.name}</span>
+                      </div>
+                    ) : (
+                      <button
+                        onClick={() => onAdd(item, `+ ${a.name}`, a.price)}
+                        disabled={disabled}
+                        className="h-7 px-3 rounded-full border border-dashed border-[#c4c6cc] text-xs font-medium text-[#44474c] hover:border-[#10b981] hover:text-[#10b981] active:scale-95 transition"
+                        aria-label={`Add ${a.name} — ₹${a.price}`}
+                      >
+                        + {a.name} · ₹{a.price}
+                      </button>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+
+        {/* Add button — hidden in view-only mode */}
+        {!viewOnly && !hasVariants && (
+          <div className="shrink-0 self-center">
+            <AnimatePresence mode="wait">
+              {baseQty > 0 ? (
+                <motion.div
+                  key="controls"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
+                  className="flex items-center gap-2"
+                >
+                  <button
+                    onClick={() => onUpdateQty(baseCartId, -1)}
+                    disabled={disabled}
+                    className="w-8 h-8 rounded-full border border-[#e2e8f0] flex items-center justify-center text-[#44474c] active:scale-90 transition"
+                    aria-label={`Remove one ${item.name}`}
+                  >
+                    <Minus size={12} weight="bold" />
+                  </button>
+                  <span className="text-sm font-semibold text-[#0d1b2a] w-5 text-center">
+                    {baseQty}
+                  </span>
+                  <motion.button
+                    whileTap={{ scale: 0.88 }}
+                    onClick={() => onAdd(item)}
+                    disabled={disabled}
+                    className="w-8 h-8 rounded-full bg-[#0d1b2a] flex items-center justify-center text-white active:scale-90 transition"
+                    aria-label={`Add one more ${item.name}`}
+                  >
+                    <Plus size={12} weight="bold" />
+                  </motion.button>
+                </motion.div>
+              ) : (
                 <motion.button
+                  key="add"
+                  initial={{ scale: 0.8, opacity: 0 }}
+                  animate={{ scale: 1, opacity: 1 }}
+                  exit={{ scale: 0.8, opacity: 0 }}
                   whileTap={{ scale: 0.88 }}
                   onClick={() => onAdd(item)}
                   disabled={disabled}
-                  className="w-8 h-8 rounded-full bg-[#0d1b2a] flex items-center justify-center text-white active:scale-90 transition"
-                  aria-label={`Add one more ${item.name}`}
+                  className={cn(
+                    "w-10 h-10 rounded-full flex items-center justify-center text-white transition",
+                    isFlying ? "scale-110" : "scale-100",
+                    disabled ? "opacity-40" : ""
+                  )}
+                  style={{ backgroundColor: "#10b981" }}
+                  aria-label={`Add ${item.name} to cart`}
                 >
-                  <Plus size={12} weight="bold" />
+                  <Plus size={16} weight="bold" />
                 </motion.button>
-              </motion.div>
-            ) : (
-              <motion.button
-                key="add"
-                initial={{ scale: 0.8, opacity: 0 }}
-                animate={{ scale: 1, opacity: 1 }}
-                exit={{ scale: 0.8, opacity: 0 }}
-                whileTap={{ scale: 0.88 }}
-                onClick={() => onAdd(item)}
-                disabled={disabled}
-                className={cn(
-                  "w-10 h-10 rounded-full flex items-center justify-center text-white transition",
-                  isFlying ? "scale-110" : "scale-100",
-                  disabled ? "opacity-40" : ""
-                )}
-                style={{ backgroundColor: "#10b981" }}
-                aria-label={`Add ${item.name} to cart`}
-              >
-                <Plus size={16} weight="bold" />
-              </motion.button>
-            )}
-          </AnimatePresence>
-        </div>
-      )}
+              )}
+            </AnimatePresence>
+          </div>
+        )}
+      </div>
     </div>
   );
 }

@@ -48,6 +48,7 @@ export default async function CustomerMenuPage({ params, searchParams }: Props) 
         id: restaurant.id,
         name: restaurant.name || "Restaurant",
         theme: restaurant.theme || { primaryColor: "#061b0e", accentColor: "#c5a059" },
+        plan: restaurant.subscription?.plan || "starter",
       }}
       tableNumber={table.tableNumber}
       tableId={table.id}

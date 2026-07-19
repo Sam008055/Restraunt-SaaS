@@ -8,15 +8,23 @@ import { adminDb } from "@/lib/firebase/admin";
  */
 export async function POST(req: NextRequest) {
   try {
-    const { restaurantId, tableId, tableNumber, cartItems, totalPaise, paymentMethod } = await req.json();
+    const { restaurantId, tableId, tableNumber, cartItems, totalPaise, paymentMethod, customerName } = await req.json();
 
     if (!restaurantId || !tableId || !cartItems?.length) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
+    const restaurantDoc = await adminDb.collection("restaurants").doc(restaurantId).get();
+    const ownerId = restaurantDoc.data()?.ownerId;
+
+    if (!ownerId) {
+      return NextResponse.json({ error: "Restaurant not found or invalid." }, { status: 404 });
+    }
+
     const orderRef = adminDb.collection("orders").doc();
     await orderRef.set({
       restaurantId,
+      ownerId,
       tableId,
       tableNumber,
       items: cartItems.map((item: any) => ({
@@ -29,6 +37,7 @@ export async function POST(req: NextRequest) {
       totalPaise,
       status: "received",
       paymentMethod: paymentMethod || "pay-at-table",
+      customerName: customerName || null,
       createdAt: new Date(),
     });
 

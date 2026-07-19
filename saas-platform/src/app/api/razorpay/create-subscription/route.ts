@@ -2,31 +2,35 @@ import { NextRequest, NextResponse } from "next/server";
 import { adminDb, isAdminConfigured } from "@/lib/firebase/admin";
 import Razorpay from "razorpay";
 
-/**
- * POST /api/razorpay/create-subscription
- * Creates a Razorpay subscription for the SaaS plan using PLATFORM keys.
- * This is for restaurant owners subscribing to SavorSystem — NOT for customer payments.
- *
- * Body: { restaurantId: string, planId: string }
- *
- * NOTE: You must create the plan in the Razorpay dashboard and put its ID in env.
- * e.g. RAZORPAY_SAAS_PLAN_ID=plan_xxxx
- */
 export async function POST(req: NextRequest) {
   try {
-    const { restaurantId, email, name } = await req.json();
+    const { restaurantId, email, name, planId } = await req.json();
 
-    if (!restaurantId || !email) {
+    if (!restaurantId || !email || !planId) {
       return NextResponse.json({ error: "Missing required fields." }, { status: 400 });
     }
 
     const PLATFORM_KEY_ID = process.env.RAZORPAY_KEY_ID;
     const PLATFORM_KEY_SECRET = process.env.RAZORPAY_KEY_SECRET;
-    const PLAN_ID = process.env.RAZORPAY_SAAS_PLAN_ID;
+    
+    let PLAN_ID: string | undefined;
+    let planAmount: number = 0;
+
+    if (planId === "pro") {
+      PLAN_ID = process.env.RAZORPAY_PLAN_PRO;
+      planAmount = 149900;
+    } else if (planId === "pro-annual") {
+      PLAN_ID = process.env.RAZORPAY_PLAN_PRO_ANNUAL;
+      planAmount = 1499000;
+    } else if (planId === "growth") {
+      PLAN_ID = process.env.RAZORPAY_PLAN_GROWTH;
+      planAmount = 49900;
+    } else if (planId === "growth-annual") {
+      PLAN_ID = process.env.RAZORPAY_PLAN_GROWTH_ANNUAL;
+      planAmount = 499000;
+    }
 
     // ── Dev mode bypass ────────────────────────────────────────────────────
-    // If neither Firebase nor Razorpay are configured (local dev without .env.local),
-    // return a special signal so the client can skip straight to the dashboard.
     if (!isAdminConfigured() || !PLATFORM_KEY_ID || !PLATFORM_KEY_SECRET) {
       console.warn(
         "[create-subscription] Running in dev bypass mode — Firebase/Razorpay not configured."
@@ -40,18 +44,30 @@ export async function POST(req: NextRequest) {
     });
 
     // ── Testing Fallback ───────────────────────────────────────────────────
-    // If the user hasn't set up a SaaS Plan ID in Razorpay, but has provided API keys,
-    // we create a standard one-time order so they can still test the checkout UI.
     if (!PLAN_ID) {
-      console.warn("[create-subscription] RAZORPAY_SAAS_PLAN_ID is missing. Falling back to a standard order for testing.");
+      console.warn(`[create-subscription] RAZORPAY_PLAN_${planId.toUpperCase()} is missing. Falling back to standard order.`);
       const order = await razorpay.orders.create({
-        amount: 399900, // ₹3,999
+        amount: planAmount,
         currency: "INR",
-        receipt: `test_saas_${Date.now()}`,
-        notes: { restaurantId, email, testMode: "true" },
+        receipt: `test_saas_${planId}_${Date.now()}`,
+        notes: { restaurantId, email, testMode: "true", plan: planId },
       });
+      
+      // Update restaurant plan in testing fallback
+      await adminDb.collection("restaurants").doc(restaurantId).set(
+        {
+          subscription: {
+            id: order.id,
+            status: "active", // Simulate active status for testing
+            plan: planId,
+            createdAt: new Date().toISOString(),
+          },
+        },
+        { merge: true }
+      );
+      
       return NextResponse.json({
-        orderId: order.id, // Return orderId instead of subscriptionId
+        orderId: order.id, 
         keyId: PLATFORM_KEY_ID,
       });
     }
@@ -59,33 +75,35 @@ export async function POST(req: NextRequest) {
     // Create or fetch a Razorpay customer
     let customerId: string | undefined;
     try {
-      const customers = await razorpay.customers.all({ email });
+      const customers = await razorpay.customers.all({ email } as any);
       if (customers.items && customers.items.length > 0) {
         customerId = customers.items[0].id;
       }
     } catch {
-      // Customer not found, we'll create inline via subscription
+      // Customer not found
     }
 
     const subscription = await razorpay.subscriptions.create({
       plan_id: PLAN_ID,
       customer_notify: 1,
       quantity: 1,
-      total_count: 12, // 12 billing cycles, then auto-renews
+      total_count: 12,
       addons: [],
       notes: {
         restaurantId,
         email,
         name: name || "",
+        plan: planId,
       },
     });
 
-    // Persist the subscription ID against the restaurant so we can manage it
+    // Persist the subscription ID against the restaurant
     await adminDb.collection("restaurants").doc(restaurantId).set(
       {
         subscription: {
           id: subscription.id,
           status: subscription.status,
+          plan: planId,
           planId: PLAN_ID,
           createdAt: new Date().toISOString(),
         },

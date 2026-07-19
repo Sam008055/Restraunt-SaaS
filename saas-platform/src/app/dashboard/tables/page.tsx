@@ -18,6 +18,8 @@ import QRCodeCanvas from "@/components/QRCodeCanvas";
 import { useRestaurantTables, useCurrentRestaurant } from "@/lib/firebase/hooks";
 import { db } from "@/lib/firebase/client";
 import { collection, doc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
+import jsPDF from "jspdf";
+import QRCode from "qrcode";
 
 interface Table {
   id: string;
@@ -35,6 +37,7 @@ export default function TablesPage() {
   const [newTableNum, setNewTableNum] = useState("");
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
+  const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
   const addTable = async () => {
     const num = newTableNum.trim();
@@ -45,6 +48,7 @@ export default function TablesPage() {
     const tableRef = doc(collection(db, "tables"));
     const newTable = {
       restaurantId: restaurantId!,
+      ownerId: restaurant?.ownerId || "",
       tableNumber: num,
       isActive: true,
       slug: restaurant?.slug || "restaurant",
@@ -57,7 +61,6 @@ export default function TablesPage() {
   };
 
   const regenerateQR = async (id: string) => {
-    // In production, this would call the generateTableQR Cloud Function
     await updateDoc(doc(db, "tables", id), {
       qrToken: `hmac-${Math.random().toString(36).slice(2, 10)}`
     });
@@ -78,6 +81,82 @@ export default function TablesPage() {
 
   const getQrUrl = (table: Table) =>
     `${typeof window !== "undefined" ? window.location.origin : "https://savorsystem.com"}/r/${table.slug}/t/${table.id}?token=${table.qrToken}`;
+
+  const downloadSingleQR = async (table: Table) => {
+    try {
+      const url = getQrUrl(table);
+      const dataUrl = await QRCode.toDataURL(url, { width: 1024, margin: 2, color: { dark: "#0d1b2a", light: "#ffffff" } });
+      const a = document.createElement("a");
+      a.href = dataUrl;
+      a.download = `Table-${table.tableNumber}-QR.png`;
+      a.click();
+    } catch (e) {
+      console.error("Failed to generate QR code PNG", e);
+    }
+  };
+
+  const downloadAllPDF = async () => {
+    setIsGeneratingPdf(true);
+    try {
+      // Create A4 PDF (210mm x 297mm)
+      const pdf = new jsPDF({ format: "a4", unit: "mm" });
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      
+      const marginX = 20;
+      const marginY = 20;
+      const qrSize = 60; // 60x60mm QR codes
+      const spacingX = (pageWidth - marginX * 2 - qrSize * 2) / 1; // 2 cols
+      const spacingY = 25;
+      
+      let x = marginX;
+      let y = marginY;
+      
+      pdf.setFontSize(20);
+      pdf.setFont("helvetica", "bold");
+      pdf.text(restaurant?.name || "Restaurant QR Codes", pageWidth / 2, 15, { align: "center" });
+
+      for (let i = 0; i < tables.length; i++) {
+        const table = tables[i];
+        
+        // Add new page if out of space
+        if (y + qrSize + 10 > pageHeight - marginY) {
+          pdf.addPage();
+          x = marginX;
+          y = marginY;
+        }
+
+        const url = getQrUrl(table);
+        const dataUrl = await QRCode.toDataURL(url, { width: 512, margin: 1 });
+        
+        // Draw the QR
+        pdf.addImage(dataUrl, "PNG", x, y, qrSize, qrSize);
+        
+        // Draw the text
+        pdf.setFontSize(14);
+        pdf.setFont("helvetica", "bold");
+        pdf.text(`Table ${table.tableNumber}`, x + qrSize / 2, y + qrSize + 5, { align: "center" });
+        pdf.setFontSize(8);
+        pdf.setFont("helvetica", "normal");
+        pdf.text("Scan to order", x + qrSize / 2, y + qrSize + 9, { align: "center" });
+
+        // Advance grid
+        if (x === marginX) {
+          x += qrSize + spacingX; // Move right
+        } else {
+          x = marginX; // Carriage return
+          y += qrSize + spacingY; // Next row
+        }
+      }
+      
+      pdf.save(`${restaurant?.name || "Restaurant"}-QR-Codes.pdf`);
+    } catch (e) {
+      console.error("Failed to generate PDF", e);
+      alert("Failed to generate PDF");
+    } finally {
+      setIsGeneratingPdf(false);
+    }
+  };
 
   return (
     <div className="flex flex-col h-full">
@@ -214,10 +293,7 @@ export default function TablesPage() {
                   </button>
 
                   <button
-                    onClick={() => {
-                      /* In production: trigger PDF/PNG download */
-                      alert(`Download QR for Table ${table.tableNumber}`);
-                    }}
+                    onClick={() => downloadSingleQR(table)}
                     className="flex items-center justify-center gap-1.5 h-8 rounded-lg text-xs font-semibold border border-[#e2e8f0] text-[#44474c] hover:bg-[#f1f3ff] transition"
                     aria-label={`Download QR for Table ${table.tableNumber}`}
                   >
@@ -270,12 +346,13 @@ export default function TablesPage() {
         {tables.length > 0 && (
           <div className="mt-8 flex flex-col items-center gap-2">
             <button
-              className="flex items-center gap-2 h-11 px-6 bg-[#0d1b2a] hover:bg-[#1b263b] text-white text-sm font-semibold rounded-xl transition-colors"
-              onClick={() => alert("PDF generation coming soon — will use puppeteer / react-pdf Cloud Function")}
+              disabled={isGeneratingPdf}
+              className="flex items-center gap-2 h-11 px-6 bg-[#0d1b2a] hover:bg-[#1b263b] disabled:bg-[#415a77] text-white text-sm font-semibold rounded-xl transition-colors"
+              onClick={downloadAllPDF}
               aria-label="Download all QR codes as PDF"
             >
-              <DownloadSimple size={16} />
-              Download All QR Codes (PDF)
+              <DownloadSimple size={16} className={isGeneratingPdf ? "animate-pulse" : ""} />
+              {isGeneratingPdf ? "Generating PDF..." : "Download All QR Codes (PDF)"}
             </button>
             <p className="text-xs text-[#74777d]">
               Prints a labeled sheet — one QR per table, ready to cut and place
