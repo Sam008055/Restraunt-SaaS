@@ -30,8 +30,9 @@ export async function POST(req: NextRequest) {
       planAmount = 499000;
     }
 
-    if (!PLATFORM_KEY_ID || !PLATFORM_KEY_SECRET || !PLAN_ID) {
-      console.warn("[create-subscription] Missing Razorpay credentials/plans. Activating in Demo Mode.");
+    // If completely missing credentials, do the instant demo mode
+    if (!PLATFORM_KEY_ID || !PLATFORM_KEY_SECRET) {
+      console.warn("[create-subscription] Missing Razorpay credentials. Activating in Demo Mode.");
       
       const isAnnual = planId.includes("annual");
       const expiresAt = new Date();
@@ -60,7 +61,45 @@ export async function POST(req: NextRequest) {
       key_secret: PLATFORM_KEY_SECRET,
     });
 
-    // Create or fetch a Razorpay customer
+    // If we have API keys but no PLAN_ID, fallback to one-time order for demo/testing
+    if (!PLAN_ID) {
+      console.warn("[create-subscription] Missing Razorpay Plan IDs. Falling back to one-time order for testing.");
+      
+      const order = await razorpay.orders.create({
+        amount: planAmount,
+        currency: "INR",
+        receipt: `receipt_${restaurantId}_${Date.now()}`.slice(0, 40),
+        notes: {
+          restaurantId,
+          email,
+          name: name || "",
+          plan: planId,
+          isMockSubscription: "true"
+        },
+      });
+
+      // Persist the pending order
+      await adminDb.collection("restaurants").doc(restaurantId).set(
+        {
+          pendingSubscription: {
+            id: order.id,
+            status: order.status,
+            plan: planId,
+            planId: "mock_order",
+            createdAt: new Date().toISOString(),
+            isMockOrder: true
+          },
+        },
+        { merge: true }
+      );
+
+      return NextResponse.json({
+        orderId: order.id,
+        keyId: PLATFORM_KEY_ID,
+      });
+    }
+
+    // Normal Subscription Flow
     let customerId: string | undefined;
     try {
       const customers = await razorpay.customers.all({ email } as any);
@@ -85,7 +124,6 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Persist the subscription ID as pending against the restaurant
     await adminDb.collection("restaurants").doc(restaurantId).set(
       {
         pendingSubscription: {
