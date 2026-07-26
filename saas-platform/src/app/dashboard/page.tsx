@@ -31,7 +31,7 @@ export default function Dashboard() {
   const revenueToday = todayOrders.reduce((sum, o) => sum + ((o.totalPaise || 0) / 100), 0);
 
   return (
-    <div className="p-8 max-w-6xl mx-auto">
+    <div className="p-3 md:p-6 lg:p-8 max-w-6xl mx-auto">
       <div className="mb-8">
         <h1 className="text-2xl font-semibold text-[#0d1b2a] mb-1">
           Welcome back, {restaurant?.name || "Partner"}!
@@ -40,9 +40,9 @@ export default function Dashboard() {
       </div>
 
       {/* Stats Grid */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 md:gap-6 mb-8">
         {/* Active Orders */}
-        <div className="bg-white rounded-xl border border-[#e2e8f0] p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-[#e2e8f0] p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center">
               <Fire size={20} weight="fill" />
@@ -53,7 +53,7 @@ export default function Dashboard() {
         </div>
 
         {/* Orders Today */}
-        <div className="bg-white rounded-xl border border-[#e2e8f0] p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-[#e2e8f0] p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-[#f1f3ff] text-blue-600 flex items-center justify-center">
               <ClipboardText size={20} weight="fill" />
@@ -64,7 +64,7 @@ export default function Dashboard() {
         </div>
 
         {/* Revenue Today */}
-        <div className="bg-white rounded-xl border border-[#e2e8f0] p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-[#e2e8f0] p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center">
               <CurrencyInr size={20} weight="fill" />
@@ -75,7 +75,7 @@ export default function Dashboard() {
         </div>
 
         {/* Active Tables */}
-        <div className="bg-white rounded-xl border border-[#e2e8f0] p-6 shadow-sm">
+        <div className="bg-white rounded-xl border border-[#e2e8f0] p-4 md:p-5 shadow-sm">
           <div className="flex items-center gap-3 mb-3">
             <div className="w-10 h-10 rounded-lg bg-[#f9f9ff] text-[#0d1b2a] flex items-center justify-center border border-[#e2e8f0]">
               <QrCode size={20} weight="fill" />
@@ -89,9 +89,9 @@ export default function Dashboard() {
       </div>
       
       {/* Quick Actions */}
-      <div className="bg-white rounded-xl border border-[#e2e8f0] p-6 shadow-sm">
+      <div className="bg-white rounded-xl border border-[#e2e8f0] p-4 md:p-5 shadow-sm">
         <h2 className="text-lg font-semibold text-[#0d1b2a] mb-4">Quick Actions</h2>
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 md:gap-4">
           <Link href="/dashboard/orders" className="flex items-center justify-between p-4 rounded-lg border border-[#e2e8f0] hover:bg-[#f1f3ff] hover:border-blue-200 transition-colors group">
             <span className="font-semibold text-[#0d1b2a] group-hover:text-blue-700">Go to Kitchen Display (KDS)</span>
             <ClipboardText size={20} className="text-[#74777d] group-hover:text-blue-600" />

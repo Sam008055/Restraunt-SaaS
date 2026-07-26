@@ -1,7 +1,7 @@
 import MenuBuilder from "./MenuBuilder";
 
 export const metadata = {
-  title: "Menu Builder – SavorSystem",
+  title: "Menu Builder – Nosh",
   description: "Manage your restaurant menu — categories, items, variants, and add-ons.",
 };
 

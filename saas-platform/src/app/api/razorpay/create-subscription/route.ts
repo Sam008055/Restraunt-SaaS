@@ -30,47 +30,35 @@ export async function POST(req: NextRequest) {
       planAmount = 499000;
     }
 
-    // ── Dev mode bypass ────────────────────────────────────────────────────
-    if (!isAdminConfigured() || !PLATFORM_KEY_ID || !PLATFORM_KEY_SECRET) {
-      console.warn(
-        "[create-subscription] Running in dev bypass mode — Firebase/Razorpay not configured."
-      );
-      return NextResponse.json({ devBypass: true }, { status: 200 });
+    if (!PLATFORM_KEY_ID || !PLATFORM_KEY_SECRET || !PLAN_ID) {
+      console.warn("[create-subscription] Missing Razorpay credentials/plans. Activating in Demo Mode.");
+      
+      const isAnnual = planId.includes("annual");
+      const expiresAt = new Date();
+      if (isAnnual) {
+        expiresAt.setFullYear(expiresAt.getFullYear() + 1);
+      } else {
+        expiresAt.setMonth(expiresAt.getMonth() + 1);
+      }
+
+      await adminDb.collection("restaurants").doc(restaurantId).set({
+        subscription: {
+          id: `demo_${Date.now()}`,
+          status: "active",
+          plan: planId,
+          createdAt: new Date().toISOString(),
+          expiresAt: expiresAt.toISOString(),
+        },
+        pendingSubscription: null
+      }, { merge: true });
+
+      return NextResponse.json({ demoSuccess: true });
     }
 
     const razorpay = new Razorpay({
       key_id: PLATFORM_KEY_ID,
       key_secret: PLATFORM_KEY_SECRET,
     });
-
-    // ── Testing Fallback ───────────────────────────────────────────────────
-    if (!PLAN_ID) {
-      console.warn(`[create-subscription] RAZORPAY_PLAN_${planId.toUpperCase()} is missing. Falling back to standard order.`);
-      const order = await razorpay.orders.create({
-        amount: planAmount,
-        currency: "INR",
-        receipt: `test_saas_${planId}_${Date.now()}`,
-        notes: { restaurantId, email, testMode: "true", plan: planId },
-      });
-      
-      // Update restaurant plan in testing fallback
-      await adminDb.collection("restaurants").doc(restaurantId).set(
-        {
-          subscription: {
-            id: order.id,
-            status: "active", // Simulate active status for testing
-            plan: planId,
-            createdAt: new Date().toISOString(),
-          },
-        },
-        { merge: true }
-      );
-      
-      return NextResponse.json({
-        orderId: order.id, 
-        keyId: PLATFORM_KEY_ID,
-      });
-    }
 
     // Create or fetch a Razorpay customer
     let customerId: string | undefined;
@@ -97,10 +85,10 @@ export async function POST(req: NextRequest) {
       },
     });
 
-    // Persist the subscription ID against the restaurant
+    // Persist the subscription ID as pending against the restaurant
     await adminDb.collection("restaurants").doc(restaurantId).set(
       {
-        subscription: {
+        pendingSubscription: {
           id: subscription.id,
           status: subscription.status,
           plan: planId,

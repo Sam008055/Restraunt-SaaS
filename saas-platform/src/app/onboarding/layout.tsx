@@ -56,7 +56,7 @@ export default function OnboardingLayout({
                 <path d="M3 8h10M8 3v10" stroke="white" strokeWidth="2" strokeLinecap="round" />
               </svg>
             </div>
-            <span className="font-semibold text-[#0d1b2a] text-sm tracking-tight">SavorSystem</span>
+            <span className="font-semibold text-[#0d1b2a] text-sm tracking-tight">Nosh</span>
           </div>
 
           {/* Step progress */}

@@ -165,7 +165,7 @@ export default function ItemModal({
         role="dialog"
         aria-modal="true"
         aria-label={mode === "add" ? "Add menu item" : "Edit menu item"}
-        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
+        className="fixed left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-50 w-[calc(100%-32px)] sm:w-full max-w-lg bg-white rounded-2xl shadow-2xl flex flex-col max-h-[90vh]"
       >
         {/* Header */}
         <div className="flex items-center justify-between px-6 py-4 border-b border-[#e2e8f0]">

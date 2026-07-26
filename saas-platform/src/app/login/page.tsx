@@ -79,7 +79,7 @@ export default function LoginPage() {
       <div className="flex-1 flex flex-col justify-center px-8 sm:px-16 md:px-24 max-w-2xl">
         <div className="mb-12">
           <Link href="/" className="font-playfair text-xl font-bold text-[#061b0e]">
-            SavorSystem
+            Nosh
           </Link>
         </div>
 

@@ -84,8 +84,13 @@ function Step3Form() {
 
       const data = await res.json();
 
-      // Dev bypass: Firebase/Razorpay not configured yet — skip to dashboard
-      if (!res.ok || data.devBypass) {
+      if (!res.ok) {
+        setError(data.error || "Failed to create subscription order. Please try again.");
+        setIsSubmitting(false);
+        return;
+      }
+
+      if (data.demoSuccess) {
         await activateRestaurant();
         return;
       }

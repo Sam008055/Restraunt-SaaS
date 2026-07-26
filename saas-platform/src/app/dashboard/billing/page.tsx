@@ -24,15 +24,14 @@ export default function BillingPage() {
   }
 
   const subscription = restaurant?.subscription;
-  const currentPlan = subscription?.plan || "starter"; // "starter", "growth", "pro"
+  const currentPlan = subscription?.plan || "starter"; // "starter", "growth", "pro", "growth-annual", "pro-annual"
   const isStarter = currentPlan === "starter";
-  const isGrowth = currentPlan === "growth" || currentPlan === "growth-annual";
-  const isPro = currentPlan === "pro" || currentPlan === "pro-annual";
-  const hasActivePlan = isGrowth || isPro;
+  const baseCurrentPlan = currentPlan.replace("-annual", "");
+  const isCurrentlyAnnual = currentPlan.includes("-annual");
 
   // Real usage stats — no mock data
   const tableCount = tables.length;
-  const tableLimit = isPro ? 50 : isGrowth ? 15 : 2; // Starter=2, Growth=15, Pro=50
+  const tableLimit = baseCurrentPlan === "pro" ? 50 : baseCurrentPlan === "growth" ? 15 : 2; // Starter=2, Growth=15, Pro=50
   const tablePercent = Math.min(100, Math.round((tableCount / tableLimit) * 100));
 
   const totalOrders = orders.length;
@@ -47,6 +46,32 @@ export default function BillingPage() {
     return d.getMonth() === now.getMonth() && d.getFullYear() === now.getFullYear();
   });
   const monthRevenue = thisMonthOrders.reduce((sum, o) => sum + ((o.totalPaise || 0) / 100), 0);
+
+  const getPlanButton = (planBase: "growth" | "pro") => {
+    const planId = billingCycle === "annually" ? `${planBase}-annual` : planBase;
+    
+    if (currentPlan === planId) {
+       return <button disabled className="mt-6 h-9 w-full bg-[#0d1b2a] text-white text-sm font-semibold rounded-lg opacity-50 cursor-default">Current Plan</button>;
+    }
+    
+    const isDowngrade = 
+       (baseCurrentPlan === "pro" && planBase === "growth") ||
+       (baseCurrentPlan === planBase && isCurrentlyAnnual && billingCycle === "monthly");
+       
+    if (isDowngrade) {
+       return <button disabled className="mt-6 h-9 w-full bg-[#0d1b2a] text-white text-sm font-semibold rounded-lg opacity-50 cursor-default">Contact Support to Downgrade</button>;
+    }
+
+    return (
+      <button 
+        onClick={() => handleManagePlan(planBase)} 
+        disabled={isSubmitting} 
+        className="mt-6 h-9 w-full bg-[#0d1b2a] hover:bg-[#1a2b3d] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
+      >
+        {isSubmitting ? "Loading..." : `Upgrade to ${planBase.charAt(0).toUpperCase() + planBase.slice(1)}`}
+      </button>
+    );
+  };
 
   const handleManagePlan = async (basePlanToBuy: "starter" | "growth" | "pro") => {
     if (basePlanToBuy === "starter") {
@@ -78,14 +103,17 @@ export default function BillingPage() {
 
       const data = await res.json();
 
-      if (!res.ok || data.devBypass) {
+      if (!res.ok) {
         toast.dismiss(loadingToast);
-        if (data.devBypass) {
-          toast.error("Billing is bypassed in Dev mode.");
-        } else {
-          toast.error(data.error || "Failed to create subscription");
-        }
+        toast.error(data.error || "Failed to create subscription");
         setIsSubmitting(false);
+        return;
+      }
+
+      if (data.demoSuccess) {
+        toast.dismiss(loadingToast);
+        toast.success("Demo Mode: Subscription activated!");
+        window.location.reload();
         return;
       }
 
@@ -107,9 +135,33 @@ export default function BillingPage() {
         name: "Nosh",
         description: basePlanToBuy === "pro" ? "Pro Plan" : "Growth Plan",
         theme: { color: "#0d1b2a" },
-        handler: async () => {
-          toast.success("Subscription successful!");
-          window.location.reload();
+        handler: async (response: any) => {
+          const verifyToast = toast.loading("Verifying payment...");
+          try {
+            const verifyRes = await fetch("/api/razorpay/verify-subscription", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({
+                restaurantId: restaurant.id,
+                planId: planToBuy,
+                razorpay_payment_id: response.razorpay_payment_id,
+                razorpay_subscription_id: response.razorpay_subscription_id,
+                razorpay_order_id: response.razorpay_order_id,
+                razorpay_signature: response.razorpay_signature,
+              }),
+            });
+            toast.dismiss(verifyToast);
+            if (verifyRes.ok) {
+              toast.success("Subscription successful!");
+              window.location.reload();
+            } else {
+              const err = await verifyRes.json();
+              toast.error(err.error || "Verification failed");
+            }
+          } catch (e) {
+            toast.dismiss(verifyToast);
+            toast.error("Verification error");
+          }
         },
         modal: {
           ondismiss: () => {
@@ -134,18 +186,26 @@ export default function BillingPage() {
     }
   };
 
+  const isGrowthCardCurrent = currentPlan === (billingCycle === "annually" ? "growth-annual" : "growth");
+  const isProCardCurrent = currentPlan === (billingCycle === "annually" ? "pro-annual" : "pro");
+
   return (
-    <div className="flex flex-col h-full">
-      <div className="px-8 py-6 bg-white border-b border-[#e2e8f0] flex justify-between items-center">
+    <div className="flex flex-col h-full overflow-y-auto">
+      <div className="px-8 py-6 bg-white border-b border-[#e2e8f0] flex flex-col md:flex-row gap-4 justify-between md:items-center">
         <div>
           <h1 className="text-2xl font-semibold text-[#0d1b2a] tracking-tight">Billing & Plan</h1>
           <p className="text-sm text-[#74777d] mt-1">
             Manage your subscription and track your usage.
+            {subscription?.expiresAt && (
+              <span className="block mt-1 text-emerald-600 font-medium">
+                Next billing date: {new Date(subscription.expiresAt).toLocaleDateString()}
+              </span>
+            )}
           </p>
         </div>
         
         {/* Billing Toggle */}
-        <div className="flex items-center gap-3 bg-[#f1f3ff] p-1 rounded-xl">
+        <div className="flex items-center gap-3 bg-[#f1f3ff] p-1 rounded-xl self-start md:self-auto">
           <button
             onClick={() => setBillingCycle("monthly")}
             className={cn(
@@ -194,18 +254,17 @@ export default function BillingPage() {
               <li className="text-sm text-[#74777d] flex items-center gap-2">✗ No Priority Support</li>
             </ul>
             <button
-              className="mt-6 h-9 w-full bg-[#0d1b2a] hover:bg-[#1a2b3d] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-              onClick={() => handleManagePlan("starter")}
-              disabled={isSubmitting || isStarter}
+              className="mt-6 h-9 w-full bg-[#0d1b2a] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50 cursor-default"
+              disabled
             >
-              {isStarter ? "Current Plan" : "Downgrade"}
+              {isStarter ? "Current Plan" : "Contact Support to Downgrade"}
             </button>
           </div>
 
           {/* Growth Plan */}
           <div className={cn(
             "bg-white rounded-xl border-2 p-6 flex flex-col relative",
-            (isGrowth && currentPlan !== "growth-annual") ? "border-indigo-600 shadow-sm" : "border-[#e2e8f0]"
+            isGrowthCardCurrent ? "border-indigo-600 shadow-sm" : "border-[#e2e8f0]"
           )}>
             <div className="flex items-start justify-between">
               <div>
@@ -215,7 +274,7 @@ export default function BillingPage() {
                   <span className="text-sm text-[#74777d] font-normal"> / {billingCycle === "annually" ? "year" : "month"}</span>
                 </p>
               </div>
-              {isGrowth && (
+              {isGrowthCardCurrent && (
                 <span className="bg-indigo-100 text-indigo-700 text-xs font-semibold px-2 py-0.5 rounded-full">
                   Current
                 </span>
@@ -225,23 +284,22 @@ export default function BillingPage() {
               <li className="text-sm text-[#44474c] flex items-center gap-2">✓ 15 Tables</li>
               <li className="text-sm text-[#44474c] flex items-center gap-2">✓ Unlimited Orders</li>
               <li className="text-sm text-[#44474c] flex items-center gap-2 font-semibold">✓ Basic POS Integration</li>
+              {billingCycle === "annually" && (
+                <li className="text-sm text-emerald-600 flex items-center gap-2 font-semibold">
+                  ✓ Free Premium Menu Setup
+                </li>
+              )}
               <li className="text-sm text-[#74777d] flex items-center gap-2">✗ No Staff Management</li>
             </ul>
-            <button
-              className="mt-6 h-9 w-full bg-[#0d1b2a] hover:bg-[#1a2b3d] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-              onClick={() => handleManagePlan("growth")}
-              disabled={isSubmitting || isGrowth}
-            >
-              {isSubmitting ? "Loading..." : isGrowth ? "Current Plan" : "Upgrade to Growth"}
-            </button>
+            {getPlanButton("growth")}
           </div>
 
           {/* Pro Plan */}
           <div className={cn(
             "bg-white rounded-xl border-2 p-6 flex flex-col relative overflow-hidden",
-            isPro ? "border-emerald-600 shadow-sm" : "border-[#e2e8f0]"
+            isProCardCurrent ? "border-emerald-600 shadow-sm" : "border-[#e2e8f0]"
           )}>
-            {!isPro && (
+            {!isProCardCurrent && (
               <div className="absolute top-3 right-[-30px] rotate-45 bg-[#eaff00] text-[#0d1b2a] text-[10px] font-bold py-1 px-8">
                 POPULAR
               </div>
@@ -254,7 +312,7 @@ export default function BillingPage() {
                   <span className="text-sm text-[#74777d] font-normal"> / {billingCycle === "annually" ? "year" : "month"}</span>
                 </p>
               </div>
-              {isPro && (
+              {isProCardCurrent && (
                 <span className="bg-emerald-100 text-emerald-700 text-xs font-semibold px-2 py-0.5 rounded-full">
                   Current
                 </span>
@@ -265,14 +323,13 @@ export default function BillingPage() {
               <li className="text-sm text-[#44474c] flex items-center gap-2">✓ Online Pre-pay (Razorpay)</li>
               <li className="text-sm text-[#44474c] flex items-center gap-2 font-semibold">✓ Staff Management</li>
               <li className="text-sm text-[#44474c] flex items-center gap-2 font-semibold">✓ KDS Order Assignment</li>
+              {billingCycle === "annually" && (
+                <li className="text-sm text-emerald-600 flex items-center gap-2 font-semibold">
+                  ✓ Free Premium Menu Setup
+                </li>
+              )}
             </ul>
-            <button
-              className="mt-6 h-9 w-full bg-[#0d1b2a] hover:bg-[#1a2b3d] text-white text-sm font-semibold rounded-lg transition-colors disabled:opacity-50"
-              onClick={() => handleManagePlan("pro")}
-              disabled={isSubmitting || isPro}
-            >
-              {isSubmitting ? "Loading..." : isPro ? "Current Plan" : "Upgrade to Pro"}
-            </button>
+            {getPlanButton("pro")}
           </div>
         </div>
 

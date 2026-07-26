@@ -15,7 +15,7 @@ interface Props {
 export async function generateMetadata({ params }: Props) {
   const { slug } = await params;
   return {
-    title: `Menu – ${slug.replace(/-/g, " ")} | SavorSystem`,
+    title: `Menu – ${slug.replace(/-/g, " ")} | Nosh`,
     description: "Scan, browse, and order from your table",
   };
 }

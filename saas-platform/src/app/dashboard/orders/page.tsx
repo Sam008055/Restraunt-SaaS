@@ -351,7 +351,7 @@ export default function KitchenDashboard() {
       </div>
 
       {/* KDS board */}
-      <div className="flex-1 grid grid-cols-3 gap-0 overflow-hidden">
+      <div className="flex-1 grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-0 overflow-y-auto md:overflow-hidden p-4 md:p-0">
         {loading ? (
           <div className="col-span-3 flex items-center justify-center py-20 text-[#74777d]">
             Loading kitchen dashboard...
@@ -364,7 +364,7 @@ export default function KitchenDashboard() {
             const Icon = col.icon;
 
             return (
-              <div key={col.status} className="flex flex-col border-r border-[#e2e8f0] last:border-0">
+              <div key={col.status} className="flex flex-col border border-[#e2e8f0] md:border-y-0 md:border-l-0 md:border-r md:last:border-r-0 rounded-xl md:rounded-none h-[500px] md:h-auto overflow-hidden bg-white">
                 {/* Column header */}
                 <div
                   className="flex items-center justify-between px-4 py-3 border-b border-[#e2e8f0] sticky top-0 z-10"

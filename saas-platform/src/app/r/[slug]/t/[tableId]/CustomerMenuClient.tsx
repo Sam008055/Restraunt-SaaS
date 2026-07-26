@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 import { motion, AnimatePresence } from "motion/react";
 import {
   Minus,
@@ -45,6 +45,7 @@ export default function CustomerMenuClient({
 
   const [cart, setCart] = useState<CartItem[]>([]);
   const [cartOpen, setCartOpen] = useState(false);
+  const [showIntro, setShowIntro] = useState(true);
   const [customerName, setCustomerName] = useState("");
   const [orderStatus, setOrderStatus] = useState<OrderStatus>("idle");
   const [activeCategory, setActiveCategory] = useState(categories[0]?.id ?? "");
@@ -55,6 +56,16 @@ export default function CustomerMenuClient({
   const subtotal = cart.reduce((sum, i) => sum + i.price * i.quantity, 0);
   const taxTotal = Math.round(subtotal * 0.05);
   const total = subtotal + taxTotal;
+
+  // ── Intro Effect ────────────────────────────────────
+  useEffect(() => {
+    if (showIntro) {
+      const timer = setTimeout(() => {
+        setShowIntro(false);
+      }, 2500);
+      return () => clearTimeout(timer);
+    }
+  }, [showIntro]);
 
   // ── Cart helpers ────────────────────────────────────
   const addToCart = useCallback((item: MenuItem, variantName?: string, variantPrice?: number) => {
@@ -251,7 +262,59 @@ export default function CustomerMenuClient({
   };
 
   return (
-    <div className="min-h-dvh bg-[#f9f9ff] flex flex-col max-w-md mx-auto relative">
+    <div className="min-h-dvh bg-[#f9f9ff] flex flex-col max-w-md mx-auto relative overflow-hidden">
+      {/* ── Intro Animation ── */}
+      <AnimatePresence>
+        {showIntro && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center pointer-events-none overflow-hidden">
+            {/* Left Curtain */}
+            <motion.div
+              className="absolute top-0 bottom-0 left-0 w-1/2 bg-[#0d1b2a]"
+              initial={{ x: 0 }}
+              exit={{ x: "-100%" }}
+              transition={{ duration: 0.8, ease: [0.76, 0, 0.24, 1], delay: 0.2 }}
+            />
+            {/* Right Curtain */}
+            <motion.div
+              className="absolute top-0 bottom-0 right-0 w-1/2 bg-[#0d1b2a]"
+              initial={{ x: 0 }}
+              exit={{ x: "100%" }}
+              transition={{ duration: 0.8, ease: [0.76, 0, 0.24, 1], delay: 0.2 }}
+            />
+            
+            {/* Content */}
+            <motion.div
+              initial={{ opacity: 0, scale: 0.8 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.9, transition: { duration: 0.4 } }}
+              transition={{ duration: 0.6, ease: "easeOut" }}
+              className="flex flex-col items-center gap-4 relative z-10"
+            >
+              <div
+                className="w-24 h-24 rounded-full flex items-center justify-center shadow-2xl overflow-hidden"
+                style={{ backgroundColor: restaurant.theme.primaryColor }}
+              >
+                {/* Assuming logoUrl exists, else fallback to Storefront icon */}
+                <Storefront size={48} color="#fff" weight="duotone" />
+              </div>
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.5, delay: 0.3 }}
+                className="text-center"
+              >
+                <h2 className="text-xl font-medium text-white/80">
+                  Welcome to
+                </h2>
+                <h1 className="text-3xl font-black mt-1 text-white tracking-tight">
+                  {restaurant.name}
+                </h1>
+                <p className="text-white/60 mt-2 text-sm">Table {tableNumber}</p>
+              </motion.div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
       {/* ── Header ── */}
       <header
         className="sticky top-0 z-20 px-4 pt-safe-top"

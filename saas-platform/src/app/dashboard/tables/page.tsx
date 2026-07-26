@@ -14,6 +14,7 @@ import {
   X,
 } from "@phosphor-icons/react";
 import { cn } from "@/lib/utils";
+import toast from "react-hot-toast";
 import QRCodeCanvas from "@/components/QRCodeCanvas";
 import { useRestaurantTables, useCurrentRestaurant } from "@/lib/firebase/hooks";
 import { db } from "@/lib/firebase/client";
@@ -39,11 +40,24 @@ export default function TablesPage() {
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
 
+  const currentPlan = restaurant?.subscription?.plan || "starter";
+  const isGrowth = currentPlan.startsWith("growth");
+  const isPro = currentPlan.startsWith("pro");
+  const tableLimit = isPro ? 50 : isGrowth ? 15 : 2;
+
   const addTable = async () => {
+    if (tables.length >= tableLimit) {
+      toast.error(`You have reached the limit of ${tableLimit} tables for your current plan.`);
+      return;
+    }
+
     const num = newTableNum.trim();
     if (!num) return;
     const exists = tables.find((t) => t.tableNumber === num);
-    if (exists) return;
+    if (exists) {
+      toast.error(`Table ${num} already exists.`);
+      return;
+    }
     
     const tableRef = doc(collection(db, "tables"));
     const newTable = {
@@ -58,6 +72,7 @@ export default function TablesPage() {
     await setDoc(tableRef, newTable);
     setNewTableNum("");
     setAddingTable(false);
+    toast.success(`Table ${num} added successfully!`);
   };
 
   const regenerateQR = async (id: string) => {
@@ -161,7 +176,7 @@ export default function TablesPage() {
   return (
     <div className="flex flex-col h-full">
       {/* Top bar */}
-      <div className="flex items-center justify-between px-6 py-4 bg-white border-b border-[#e2e8f0] sticky top-0 z-10">
+      <div className="flex items-center justify-between px-4 md:px-6 py-3 md:py-4 bg-white border-b border-[#e2e8f0] sticky top-0 z-10">
         <div>
           <h1 className="text-lg font-semibold text-[#0d1b2a]">Tables & QR Codes</h1>
           <p className="text-xs text-[#74777d] mt-0.5">
@@ -179,7 +194,7 @@ export default function TablesPage() {
         </button>
       </div>
 
-      <div className="flex-1 overflow-y-auto p-6">
+      <div className="flex-1 overflow-y-auto p-4 md:p-6">
         {/* Add table inline form */}
         <AnimatePresence>
           {addingTable && (
