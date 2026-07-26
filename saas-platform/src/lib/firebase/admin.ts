@@ -13,8 +13,22 @@ let adminStorage: Storage;
 
 const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
-  ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, "\n").replace(/^"|"$/g, "")
+let rawPrivateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY;
+
+console.log("[Firebase Admin] Diagnostics:");
+console.log(`- Project ID present: ${!!projectId} (${projectId})`);
+console.log(`- Client Email present: ${!!clientEmail} (${clientEmail})`);
+console.log(`- Private Key present: ${!!rawPrivateKey}`);
+if (rawPrivateKey) {
+  console.log(`- Private Key length: ${rawPrivateKey.length}`);
+  console.log(`- Private Key starts with: ${rawPrivateKey.substring(0, 30)}...`);
+  console.log(`- Private Key ends with: ...${rawPrivateKey.substring(rawPrivateKey.length - 30)}`);
+  console.log(`- Contains literal \\n: ${rawPrivateKey.includes("\\n")}`);
+  console.log(`- Contains actual newlines: ${rawPrivateKey.includes("\n")}`);
+}
+
+const privateKey = rawPrivateKey
+  ? rawPrivateKey.replace(/\\n/g, "\n").replace(/^"|"$/g, "")
   : undefined;
 
 // Only initialize if credentials are present.
@@ -24,12 +38,20 @@ const isConfigured = Boolean(projectId && clientEmail && privateKey);
 if (!getApps().length) {
   if (isConfigured) {
     try {
+      console.log("[Firebase Admin] Attempting to initialize with cert...");
       adminApp = initializeApp({
         credential: cert({ projectId, clientEmail, privateKey }),
         storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
       });
-    } catch (error) {
-      console.error("[Firebase Admin] Failed to initialize. Check your FIREBASE_ADMIN_PRIVATE_KEY format.", error);
+      console.log("[Firebase Admin] Successfully initialized.");
+    } catch (error: any) {
+      console.error("[Firebase Admin] Failed to initialize. Check your FIREBASE_ADMIN_PRIVATE_KEY format.");
+      console.error("Error name:", error.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      
+      // Initialize with a placeholder so it doesn't crash module evaluation,
+      // but we log the error loudly.
       adminApp = initializeApp({ projectId: "unconfigured-dev-placeholder" });
     }
   } else {
