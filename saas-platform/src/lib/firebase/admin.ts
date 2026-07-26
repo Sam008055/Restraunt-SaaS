@@ -13,7 +13,9 @@ let adminStorage: Storage;
 
 const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n").replace(/^"|"$/g, '');
+const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY
+  ? process.env.FIREBASE_ADMIN_PRIVATE_KEY.replace(/\\n/g, "\n").replace(/^"|"$/g, "")
+  : undefined;
 
 // Only initialize if credentials are present.
 // In local dev without .env.local filled in, this will be a stub.
