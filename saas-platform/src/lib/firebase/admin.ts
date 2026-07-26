@@ -13,7 +13,7 @@ let adminStorage: Storage;
 
 const projectId = process.env.FIREBASE_ADMIN_PROJECT_ID;
 const clientEmail = process.env.FIREBASE_ADMIN_CLIENT_EMAIL;
-const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n");
+const privateKey = process.env.FIREBASE_ADMIN_PRIVATE_KEY?.replace(/\\n/g, "\n").replace(/^"|"$/g, '');
 
 // Only initialize if credentials are present.
 // In local dev without .env.local filled in, this will be a stub.
@@ -21,10 +21,15 @@ const isConfigured = Boolean(projectId && clientEmail && privateKey);
 
 if (!getApps().length) {
   if (isConfigured) {
-    adminApp = initializeApp({
-      credential: cert({ projectId, clientEmail, privateKey }),
-      storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
-    });
+    try {
+      adminApp = initializeApp({
+        credential: cert({ projectId, clientEmail, privateKey }),
+        storageBucket: process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET,
+      });
+    } catch (error) {
+      console.error("[Firebase Admin] Failed to initialize. Check your FIREBASE_ADMIN_PRIVATE_KEY format.", error);
+      adminApp = initializeApp({ projectId: "unconfigured-dev-placeholder" });
+    }
   } else {
     // Initialize with a placeholder so getApps() is non-empty and the app doesn't crash on import.
     // API routes should check `isAdminConfigured()` before attempting Firestore calls.
